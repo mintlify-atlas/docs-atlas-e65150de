@@ -1,0 +1,252 @@
+---
+title: "Template system: variables, snippets, and profiles"
+description: "Complete reference for the four Claude Dev Kit templates, variable substitution syntax, the 35-snippet library, and how profiles drive conditional output."
+---
+
+The template system generates the BDD feature files, implementation plans, unit test files, and final reports that the `/implement-us` skill produces. Each template uses simple string substitution: `{VARIABLE_NAME}` placeholders are replaced with values from the active profile, and `{SNIPPET:id}` placeholders are replaced with stack-specific code blocks.
+
+## The four templates
+
+| Template | Path | Generated output |
+|----------|------|-----------------|
+| BDD scenarios | `templates/bdd/scenario.feature` | `tests/features/{US_ID}-{name}.feature` |
+| Implementation plan | `templates/planning/implementation-plan.md` | `docs/plans/{US_ID}-plan.md` |
+| Unit tests | `templates/testing/test-unit.py` | `tests/unit/test_*.py` |
+| Implementation report | `templates/reporting/implementation-report.md` | `docs/reports/{US_ID}-report.md` |
+
+---
+
+## Variable substitution
+
+Variables follow the syntax `{VARIABLE_NAME}` — uppercase, no spaces. The skill replaces every occurrence before writing the output file.
+
+**Example from `templates/bdd/scenario.feature`:**
+
+```gherkin
+Feature: {FEATURE_TITLE} ({US_ID})
+  Como {USER_ROLE}
+  Quiero {USER_WANT}
+  Para {USER_BENEFIT}
+
+  Background:
+{BACKGROUND_SETUP}
+```
+
+After substitution with a `pyqt-mvc` profile:
+
+```gherkin
+Feature: Visualizar temperatura actual (US-003)
+  Como operador del sistema
+  Quiero ver la temperatura en el panel principal
+  Para monitorear el estado del dispositivo
+
+  Background:
+    Given la aplicación está iniciada
+    And el controlador de temperatura está activo
+```
+
+### Available variables
+
+Variables come from two sources that the installer merges into `.claude/config.json`:
+
+1. The base config at `skills/implement-us/config.json`
+2. The active profile's customization file at `skills/implement-us/customizations/{profile}.json`
+
+| Variable | Description | Example value |
+|----------|-------------|---------------|
+| `{US_ID}` | User story identifier | `US-003` |
+| `{US_TITLE}` | User story title | `Implementar panel display` |
+| `{PRIORITY}` | Story priority | `Alta` |
+| `{STORY_POINTS}` | Story-point estimate | `3` |
+| `{PRODUCT}` | Product name | `ux_termostato` |
+| `{USER_ROLE}` | Actor in the user story | `operador del sistema` |
+| `{USER_WANT}` | Desired action | `ver la temperatura` |
+| `{USER_BENEFIT}` | Expected outcome | `monitorear el estado` |
+| `{ARCHITECTURE_PATTERN}` | Active architecture pattern | `mvc`, `layered`, `bff`, `modular` |
+| `{COMPONENT_TYPE}` | Type of component being built | `Panel`, `Service`, `Repository` |
+| `{COMPONENT_PATH}` | File path for the component | `app/presentacion/display.py` |
+| `{TEST_FRAMEWORK}` | Testing framework for the profile | `pytest-qt`, `pytest` |
+| `{BASE_CLASS}` | Base class for the component | `ModeloBase`, `BaseModel` |
+| `{DOMAIN_CONTEXT}` | Domain-specific context | varies by project |
+| `{PROJECT_ROOT}` | Root directory of the project | `.` |
+| `{BACKGROUND_SETUP}` | Gherkin `Background:` steps | stack-specific steps |
+| `{ARCHITECTURE_DESCRIPTION}` | Free-text architecture description | varies by profile |
+
+<Note>
+  Variables in UPPERCASE (e.g., `{US_ID}`, `{COMPONENT_PATH}`) are replaced during generation. Variables in the template files that are shown in `{lowercase}` in examples (e.g., `tests/test_{component_1}_integracion.py`) are illustrative placeholders in the template's own comments, not substitution variables.
+</Note>
+
+---
+
+## Snippet system
+
+Snippets let a single template produce different output depending on which profile is active. They use the syntax `{SNIPPET:id}` and are replaced with the corresponding string from the active profile's `"snippets"` section.
+
+**Syntax in templates:**
+
+```
+{SNIPPET:snippet_id}
+```
+
+**Syntax in profile JSON files:**
+
+```json
+{
+  "snippets": {
+    "snippet_id": "content to insert..."
+  }
+}
+```
+
+### How snippets work
+
+1. Variables are replaced first.
+2. Snippet placeholders are replaced second.
+3. A snippet may be an empty string (`""`) for profiles where that block does not apply — the placeholder is simply removed.
+
+### Snippet example: conditional test class
+
+**In `templates/testing/test-unit.py`:**
+
+```python
+{SNIPPET:test_signals_class}
+
+class TestValidacion:
+    """Tests de validación de datos y errores."""
+```
+
+**In `skills/implement-us/customizations/pyqt-mvc.json`:**
+
+```json
+{
+  "snippets": {
+    "test_signals_class": "class TestSignals:\n    \"\"\"Tests de señales PyQt.\"\"\"\n    ..."
+  }
+}
+```
+
+**In `skills/implement-us/customizations/fastapi-rest.json`:**
+
+```json
+{
+  "snippets": {
+    "test_signals_class": ""
+  }
+}
+```
+
+**Output for `pyqt-mvc`:**
+
+```python
+class TestSignals:
+    """Tests de señales PyQt."""
+    ...
+
+class TestValidacion:
+    """Tests de validación de datos y errores."""
+```
+
+**Output for `fastapi-rest`:**
+
+```python
+
+class TestValidacion:
+    """Tests de validación de datos y errores."""
+```
+
+### Snippet types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| Text | Markdown blocks such as checklists | `- [ ] Conectar señales en Coordinator` |
+| Code | Python import statements, class bodies | `from PyQt6.QtCore import QTimer` |
+| Multiline | Blocks with `\n` embedded | Full class definitions |
+| Empty | `""` for profiles where the block does not apply | FastAPI has no PyQt signals |
+
+### Snippet library
+
+The library contains 7 snippet types × 5 profiles = **35 snippets** across all customization files. Snippet IDs used in templates:
+
+| Snippet ID | Used in template | Purpose |
+|------------|-----------------|---------|
+| `test_imports` | `test-unit.py` | Stack-specific import statements at top of test file |
+| `test_signals_class` | `test-unit.py` | PyQt signal test class (empty for non-PyQt profiles) |
+| `test_integration_class` | `test-unit.py` | Integration-style test class for the unit test file |
+| `test_fixtures` | `test-unit.py` | pytest fixtures specific to the stack |
+| `integration_checklist` | `implementation-plan.md` | Stack-specific integration checklist items |
+| `architecture_code_blocks` | `implementation-report.md` | Code blocks showing how the component integrates |
+| `manual_testing_specifics` | `implementation-report.md` | Manual testing steps specific to the stack |
+
+---
+
+## Profiles and the template system
+
+Each profile customization file has four top-level sections:
+
+```json
+{
+  "profile_metadata": {
+    "name": "pyqt-mvc",
+    "version": "1.0.0"
+  },
+  "variables": { ... },
+  "template_variables": { ... },
+  "snippets": { ... }
+}
+```
+
+| Section | Purpose |
+|---------|---------|
+| `profile_metadata` | Name and version of the profile |
+| `variables` | Skill-level configuration (architecture pattern, test framework, etc.) |
+| `template_variables` | Variables inserted into template placeholders |
+| `snippets` | Conditional code/text blocks keyed by snippet ID |
+
+### Available profiles
+
+| Profile key | Stack | Architecture pattern |
+|-------------|-------|---------------------|
+| `pyqt-mvc` | PyQt6 desktop applications | MVC |
+| `fastapi-rest` | FastAPI REST APIs | Layered (async) |
+| `flask-rest` | Flask REST APIs | Layered (sync) |
+| `flask-webapp` | Flask fullstack with Jinja2 SSR | BFF |
+| `generic-python` | Python libraries, CLI tools, scripts | Modular |
+| `hexagonal-ddd-bc` | Hexagonal architecture + DDD + Bounded Context | Hexagonal |
+
+Profile files live at `skills/implement-us/customizations/{profile}.json`.
+
+---
+
+## Extending the template system
+
+### Adding a variable
+
+1. Define it in every profile's `template_variables` section:
+
+   ```json
+   { "template_variables": { "MY_VAR": "value for this profile" } }
+   ```
+
+2. Use it in any template:
+
+   ```markdown
+   {MY_VAR}
+   ```
+
+### Adding a snippet
+
+1. Define it in **all** profiles (use `""` for profiles where it does not apply):
+
+   ```json
+   { "snippets": { "my_snippet": "content..." } }
+   ```
+
+2. Use it in a template:
+
+   ```markdown
+   {SNIPPET:my_snippet}
+   ```
+
+<Warning>
+  Snippets must be defined in every profile file. If a profile is missing a snippet key the placeholder will remain unresolved in the generated output.
+</Warning>

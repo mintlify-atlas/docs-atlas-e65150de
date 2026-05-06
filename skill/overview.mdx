@@ -1,0 +1,107 @@
+---
+title: "implement-us skill: overview, invocation, and flags"
+description: "Learn what the implement-us skill does, how to invoke it, what a user story file looks like, and how the 10 phases guide a full implementation cycle."
+---
+
+The `implement-us` skill is the core automation engine of Claude Dev Kit. It guides Claude Code through the complete implementation of a Python user story — from environment validation and BDD scenario generation through code, tests, quality gates, documentation, and a final report — without requiring you to coordinate each step manually.
+
+## Invoking the skill
+
+Run the skill from within your project by passing the user story ID:
+
+```bash
+/implement-us US-001
+```
+
+You can also pass optional flags:
+
+```bash
+/implement-us US-001 --producto my_app       # set the product or module name
+/implement-us US-001 --skip-bdd              # skip BDD scenario generation (Phases 1 and 6)
+/implement-us US-001 --producto auth --skip-bdd
+```
+
+| Parameter | Required | Description |
+|---|---|---|
+| `US-XXX` | Yes | User story identifier |
+| `--producto {PRODUCT}` | No | Product or module name (default: value of `product` in `config.json`) |
+| `--skip-bdd` | No | Skip Phases 1 and 6 (not recommended for feature stories) |
+
+## What a user story file looks like
+
+The skill reads the user story from the location you specify during Phase 0. A minimal user story file for US-001 looks like this:
+
+```markdown
+# US-001: Simple Calculator
+
+## Description
+As a user, I want a calculator that adds two numbers.
+
+## Acceptance Criteria
+- Accepts two numbers as parameters
+- Returns the correct sum
+- Handles edge cases (negatives, zeros)
+```
+
+The skill extracts the title, acceptance criteria, story points, and priority from this file. Common locations include `docs/user-stories/US-001.md`, GitHub Issues, or Jira tickets — you tell the skill where to find it during Phase 0.
+
+## The 10 phases at a glance
+
+The skill runs 10 sequential phases. Each phase has a required gate on entry (verifying artifacts from previous phases exist on disk) and a checklist on exit before advancing.
+
+| Phase | Name | Key output |
+|---|---|---|
+| 0 | Validation | `docs/plans/{US_ID}-context.md` |
+| 1 | BDD scenario generation | `tests/features/{US_ID}-{name}.feature` |
+| 2 | Implementation plan | `docs/plans/{US_ID}-plan.md` |
+| 3 | Implementation | Source files under `src/` (structure per active profile) |
+| 4 | Unit tests | `tests/unit/test_*.py` |
+| 5 | Integration tests | `tests/integration/test_*.py` |
+| 6 | BDD validation | `tests/step_defs/test_*_steps.py` |
+| 7 | Quality gates | `quality/reports/{US_ID}-quality.json` |
+| 8 | Documentation | Updated docstrings, CHANGELOG, architecture docs |
+| 9 | Final report | `docs/reports/{US_ID}-report.md` |
+
+Phases 1 and 6 are skipped automatically when BDD does not apply (refactoring stories, bug fixes without behavioral change, or explicit `--skip-bdd`).
+
+## Blocking STOP points
+
+Two phases require explicit human approval before the skill advances. The skill pauses and waits — it will not proceed autonomously past these gates.
+
+<Note>
+**Phase 2 — Implementation plan approval (STOP)**
+
+The skill generates `docs/plans/{US_ID}-plan.md` and presents it to you. You must respond with an explicit approval before Phase 3 begins. You can request adjustments; the skill incorporates them and re-presents the plan until you approve.
+</Note>
+
+<Note>
+**Phase 9 — Final report verification (STOP)**
+
+Before closing the tracking session, the skill verifies that `docs/reports/{US_ID}-report.md` exists on disk, that it contains real metrics read from `quality/reports/{US_ID}-quality.json`, and that the full report has been presented in the conversation.
+</Note>
+
+## Failure recovery protocol
+
+When a phase fails, the skill follows this protocol in order:
+
+1. Read the full error output — do not assume the cause
+2. Identify which phase is the source of the problem (may differ from the phase that surfaced the error)
+3. Apply the fix in the originating phase — do not patch symptoms
+4. Re-run the complete phase (not just the failing step)
+5. Verify the exit checklist before advancing
+6. After two autonomous retry attempts without success, stop and inform you — the skill does not continue unilaterally after two failures
+
+<Warning>
+A phase with an incomplete exit checklist cannot advance. The skill will not skip checklist items or mark them complete without verifying the actual on-disk artifact.
+</Warning>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Phase deep dive" icon="list-ordered" href="/skill/phases">
+    Detailed breakdown of all 10 phases: inputs, outputs, approval requirements, and exit checklists.
+  </Card>
+  <Card title="Quality gates" icon="shield-check" href="/skill/quality-gates">
+    The 4 quality metrics validated in Phase 7, per-profile thresholds, and the failure recovery protocol.
+  </Card>
+</CardGroup>

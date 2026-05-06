@@ -1,0 +1,304 @@
+---
+title: "PyQt6 MVC example: desktop calculator with pytest-qt"
+description: "Build a desktop calculator with PyQt6, strict MVC architecture, immutable frozen dataclasses, and pytest-qt GUI testing using the pyqt-mvc profile."
+---
+
+This example shows how Claude Dev Kit's `/implement-us` skill generates a **desktop calculator application** using PyQt6 and the `pyqt-mvc` profile. The profile enforces strict MVC separation: a frozen dataclass Model, a `QWidget` View that only emits signals, and a Controller that connects them. Testing uses `pytest-qt` with `qtbot` to simulate button clicks without launching a real display.
+
+## Project overview
+
+| Property | Value |
+|---|---|
+| Stack | PyQt6 + Python 3.10+ |
+| Architecture | MVC (Model-View-Controller) |
+| Test framework | pytest + pytest-qt |
+| Minimum coverage | 90% |
+| Tests generated | 14 (8 unit model, 6 unit controller) |
+| Actual coverage | 86% (unit tests only; integration pending) |
+| Profile | `pyqt-mvc` |
+
+## User story
+
+```markdown
+# US-001: Simple Calculator
+
+As a desktop user
+I want a calculator with a graphical interface
+So I can perform basic math operations (+, -, *, ÷)
+```
+
+**Acceptance criteria:**
+
+- Display showing the current number
+- Buttons 0–9 for entering numbers
+- Buttons `+`, `-`, `*`, `÷` for operations
+- `=` button to show the result
+- `C` button to clear
+- Division-by-zero error handling
+
+## Implementation walkthrough
+
+<Steps>
+  <Step title="Install the pyqt-mvc profile">
+    Run the installer with the `pyqt-mvc` profile. This configures the MVC component structure under `app/presentacion/paneles/`, the `pytest-qt` test runner, and quality gate thresholds including a higher cyclomatic complexity limit (12 instead of 10) to accommodate UI event handlers.
+
+    ```bash
+    python ~/.claude-dev-kit/install/installer.py --profile pyqt-mvc --yes
+    ```
+  </Step>
+
+  <Step title="Create the user story file">
+    ```bash
+    cat > historias-usuario/US-001.md << 'EOF'
+    # US-001: Simple Calculator
+
+    As a desktop user
+    I want a calculator with a graphical interface
+    So I can perform basic math operations (+, -, *, ÷)
+
+    ## Acceptance Criteria
+
+    - Display showing the current number
+    - Buttons 0-9 for entering numbers
+    - Buttons +, -, *, / for operations
+    - = button to show result
+    - C button to clear
+    - Division-by-zero error message
+
+    ## Technical Notes
+
+    - Architecture: MVC (Model-View-Controller)
+    - Framework: PyQt6
+    - Display: QLineEdit (read-only)
+    - Layout: QGridLayout for buttons
+    EOF
+    ```
+  </Step>
+
+  <Step title="Run the skill">
+    ```bash
+    /implement-us US-001
+    ```
+
+    The skill generates six Gherkin scenarios, an implementation plan, three Python MVC files, and a test suite — in approximately three minutes total.
+  </Step>
+
+  <Step title="Review BDD scenarios (Phase 1)">
+    Six scenarios are generated, each testing a single user interaction with the calculator.
+
+    ```gherkin
+    Feature: Simple Calculator
+
+      Background:
+        Given la aplicación está ejecutándose
+        And el display muestra "0"
+
+      Scenario: Sumar dos números
+        When el usuario presiona el botón "5"
+        And el usuario presiona el botón "+"
+        And el usuario presiona el botón "3"
+        And el usuario presiona el botón "="
+        Then el display debe mostrar "8"
+
+      Scenario: División por cero muestra error
+        When el usuario presiona el botón "8"
+        And el usuario presiona el botón "/"
+        And el usuario presiona el botón "0"
+        And el usuario presiona el botón "="
+        Then el display debe mostrar "Error: Cannot divide by zero"
+
+      Scenario: Limpiar display
+        When el usuario presiona el botón "123"
+        And el usuario presiona el botón "C"
+        Then el display debe mostrar "0"
+    ```
+  </Step>
+
+  <Step title="Implement MVC components (Phase 3)">
+    Components are generated in bottom-up order:
+
+    1. **`modelo.py`** — `CalculatorModelo` as `@dataclass(frozen=True)`, with `add()`, `subtract()`, `multiply()`, `divide()`, and `execute_pending_operation()` methods. Immutability is enforced at the Python level: any operation returns a *new* instance.
+    2. **`controlador.py`** — `CalculatorControlador` connects View signals to Model operations. It maintains `current_input` state and creates new Model instances on each operation.
+    3. **`vista.py`** — `CalculatorVista(QWidget)` defines three `pyqtSignal`s (`button_clicked`, `equals_clicked`, `clear_clicked`), builds a `QGridLayout` with 17 buttons, and exposes `update_display()` and `show_error()` methods. No business logic.
+    4. **`main.py`** — wires Model → Controller → View into a `QMainWindow`.
+  </Step>
+
+  <Step title="Run tests with pytest-qt (Phases 4–5)">
+    Unit tests for the Model run without a display (no `QApplication` needed). Controller tests use mock Views.
+
+    ```bash
+    pytest tests/unit/ -v --cov=app --cov-report=term-missing
+    ```
+
+    Expected result: **14 passed**.
+
+    Integration tests use `qtbot` to simulate button clicks:
+
+    ```bash
+    pytest tests/integration/ -v
+    ```
+  </Step>
+</Steps>
+
+## Command used
+
+```bash
+/implement-us US-001
+```
+
+<Note>
+The `pyqt-mvc` profile uses `pytest-qt` for GUI testing. The `qtbot` fixture requires an active `QApplication` instance, which `pytest-qt` creates automatically for the test session. Controller unit tests that do not touch the View can run without a display by using mock objects instead of a real `CalculatorVista`.
+</Note>
+
+## Generated file structure
+
+```
+pyqt-calculator/
+├── app/
+│   ├── __init__.py
+│   └── presentacion/
+│       └── paneles/
+│           └── calculator/
+│               ├── __init__.py
+│               ├── modelo.py      # CalculatorModelo (75 lines)
+│               ├── vista.py       # CalculatorVista (115 lines)
+│               └── controlador.py # CalculatorControlador (130 lines)
+├── tests/
+│   ├── bdd/
+│   │   └── US-001.feature         # 6 BDD scenarios (38 lines)
+│   └── unit/
+│       ├── test_calculator_modelo.py      # 8 tests (70 lines)
+│       └── test_calculator_controlador.py # 6 tests (90 lines)
+├── docs/
+│   └── planning/US-001-plan.md    # 146 lines
+├── historias-usuario/US-001.md
+├── main.py                        # 28 lines
+└── requirements.txt
+```
+
+**Total: 15 files, 805 lines.**
+
+## Test results
+
+```
+============================= test session starts ==============================
+plugins: qt-4.2.0, cov-4.1.0, bdd-6.1.0
+collected 14 items
+
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_add PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_subtract PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_multiply PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_divide PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_divide_by_zero PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_modelo_is_immutable PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_execute_pending_operation_add PASSED
+tests/unit/test_calculator_modelo.py::TestCalculatorModelo::test_execute_pending_operation_divide_by_zero PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_number_input_single_digit PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_number_input_multiple_digits PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_clear PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_operation_stores_value PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_equals_simple_addition PASSED
+tests/unit/test_calculator_controlador.py::TestCalculatorControlador::test_handle_equals_division_by_zero PASSED
+
+============================== 14 passed in 0.32s ==============================
+```
+
+## Quality gate results
+
+| Metric | Result | Threshold | Status |
+|---|---|---|---|
+| Tests passing | 14/14 (100%) | 100% | Pass |
+| Coverage | 86% | ≥ 90% | Note |
+| Pylint score | 9.12/10 | ≥ 8.0 | Pass |
+| Cyclomatic complexity | A (2.2 avg) | < 12 | Pass |
+| Maintainability index | A/B (68–85) | ≥ 20 | Pass |
+
+<Note>
+Coverage reaches 86% with unit tests only. The `vista.py` View file accounts for most of the gap — event handler lambdas and `show_error()` require a running `QApplication` with a display to exercise fully. Adding `pytest-qt` integration tests with `qtbot.mouseClick()` brings coverage above the 90% threshold.
+</Note>
+
+## Key code snippet
+
+The `CalculatorModelo` uses `@dataclass(frozen=True)` to guarantee immutability. Every operation returns a new instance rather than mutating state:
+
+```python
+# app/presentacion/paneles/calculator/modelo.py
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class CalculatorModelo:
+    """
+    Immutable calculator model.
+
+    All operations return a new CalculatorModelo instance.
+    """
+    current_value: float = 0.0
+    pending_value: float = 0.0
+    pending_operation: Optional[str] = None
+
+    def divide(self, a: float, b: float) -> float:
+        """Divide a by b. Raises ZeroDivisionError if b is 0."""
+        if b == 0:
+            raise ZeroDivisionError("Cannot divide by zero")
+        return a / b
+
+    def execute_pending_operation(self, new_value: float) -> 'CalculatorModelo':
+        """Execute the pending operation and return a new model instance."""
+        if self.pending_operation is None:
+            return CalculatorModelo(current_value=new_value)
+
+        operations = {
+            '+': self.add,
+            '-': self.subtract,
+            '*': self.multiply,
+            '/': self.divide
+        }
+
+        operation_func = operations.get(self.pending_operation)
+        if operation_func:
+            result = operation_func(self.pending_value, new_value)
+            return CalculatorModelo(current_value=result)
+
+        return CalculatorModelo(current_value=new_value)
+```
+
+The `pytest-qt` integration test pattern uses `qtbot.mouseClick()` to simulate user interaction end-to-end:
+
+```python
+# tests/integration/test_calculator_integration.py
+from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtCore import Qt
+
+
+def test_full_addition_flow(calculator_app, qtbot):
+    """Test the complete flow: 5 + 3 = 8."""
+    window = calculator_app
+    buttons = window.findChildren(QPushButton)
+
+    button_5 = [b for b in buttons if b.text() == '5'][0]
+    button_plus = [b for b in buttons if b.text() == '+'][0]
+    button_3 = [b for b in buttons if b.text() == '3'][0]
+    button_equals = [b for b in buttons if b.text() == '='][0]
+
+    qtbot.mouseClick(button_5, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(button_plus, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(button_3, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(button_equals, Qt.MouseButton.LeftButton)
+
+    assert window.display.text() == '8.0'
+```
+
+<Tip>
+Use `monkeypatch.setattr(QMessageBox, 'critical', lambda *a, **k: None)` in tests that trigger division-by-zero error dialogs. Without mocking, `QMessageBox.critical` blocks the test waiting for a user to dismiss the dialog.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="FastAPI REST example" icon="bolt" href="/examples/fastapi-rest">
+    Contrast the MVC desktop pattern with FastAPI's layered REST architecture and async test suite.
+  </Card>
+  <Card title="Generic Python example" icon="terminal" href="/examples/generic-python">
+    See a CLI tool built with Python stdlib only — no framework, 90 tests, and perfect Pylint score.
+  </Card>
+</CardGroup>

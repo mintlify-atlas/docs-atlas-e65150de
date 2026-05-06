@@ -1,0 +1,297 @@
+---
+title: "Installer CLI reference: flags, profiles, and config"
+description: "Claude Dev Kit installer reference: CLI flags, interactive and non-interactive modes, installed files, and the config.yaml structure."
+---
+
+The installer copies the Claude Dev Kit framework into a project's `.claude/` directory, merges the base configuration with the selected profile, and generates a `CLAUDE.md` file. It runs on Linux, macOS, and Windows and requires Python 3.8 or higher.
+
+## Running the installer
+
+```bash
+python ~/.claude-dev-kit/install/installer.py
+```
+
+Run without arguments to enter interactive mode, which displays a numbered profile selection menu.
+
+---
+
+## CLI flags
+
+<AccordionGroup>
+  <Accordion title="--profile">
+    **Type:** string
+
+    Selects the technology profile to install. Skips the interactive profile menu.
+
+    ```bash
+    python installer.py --profile pyqt-mvc
+    ```
+
+    Available values:
+
+    | Value | Stack | Architecture |
+    |-------|-------|-------------|
+    | `pyqt-mvc` | PyQt6 desktop applications | MVC |
+    | `fastapi-rest` | FastAPI REST APIs | Layered (async) |
+    | `flask-rest` | Flask REST APIs | Layered (sync) |
+    | `flask-webapp` | Flask fullstack with Jinja2 SSR | BFF |
+    | `generic-python` | Python libraries, CLI tools, scripts | Modular |
+    | `hexagonal-ddd-bc` | Hexagonal + DDD + Bounded Context | Hexagonal |
+  </Accordion>
+
+  <Accordion title="--yes / -y">
+    **Type:** flag
+
+    Accepts all confirmation prompts automatically. Use together with `--profile` for fully non-interactive installation.
+
+    ```bash
+    python installer.py --profile fastapi-rest --yes
+    ```
+  </Accordion>
+
+  <Accordion title="--dry-run">
+    **Type:** flag
+
+    Simulates the installation without writing any files. Prints every action that would be taken, including file copies and config generation.
+
+    ```bash
+    python installer.py --profile flask-rest --dry-run
+    ```
+
+    Output includes `[DRY-RUN]` prefixes on every logged action. Validation is skipped in dry-run mode.
+  </Accordion>
+
+  <Accordion title="--force">
+    **Type:** flag
+
+    Overwrites an existing `.claude/` directory without prompting. Without this flag, the installer asks for confirmation when `.claude/` already exists.
+
+    ```bash
+    python installer.py --profile pyqt-mvc --force --yes
+    ```
+  </Accordion>
+
+  <Accordion title="--config">
+    **Type:** path
+
+    Path to a custom `config.yaml`. Defaults to `install/config.yaml` in the kit directory.
+
+    ```bash
+    python installer.py --config /path/to/my-config.yaml
+    ```
+  </Accordion>
+
+  <Accordion title="--target">
+    **Type:** path
+
+    The project directory to install into. Defaults to the current working directory.
+
+    ```bash
+    python installer.py --profile generic-python --target /path/to/my-project
+    ```
+  </Accordion>
+
+  <Accordion title="--no-color">
+    **Type:** flag
+
+    Disables ANSI color codes in terminal output. Useful for piping output to a log file.
+
+    ```bash
+    python installer.py --no-color
+    ```
+  </Accordion>
+
+  <Accordion title="--skip-validation">
+    **Type:** flag
+
+    Skips the post-installation validation step. By default the installer runs `validate-setup.py` after copying files.
+
+    ```bash
+    python installer.py --profile pyqt-mvc --yes --skip-validation
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Interactive mode vs non-interactive mode
+
+### Interactive mode
+
+Run the installer with no arguments to enter interactive mode:
+
+```bash
+python installer.py
+```
+
+The installer displays a welcome banner and a numbered menu of available profiles:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 Claude Dev Kit - Installer v1.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Perfiles disponibles:
+
+1. PyQt + MVC (pyqt-mvc)
+   PyQt6 applications with MVC architecture
+
+2. FastAPI + REST (fastapi-rest)
+   FastAPI REST APIs with layered architecture
+...
+
+Selecciona un perfil [1-6]:
+```
+
+If `.claude/` already exists, the installer asks whether to overwrite it.
+
+### Non-interactive mode
+
+Pass `--profile` and `--yes` to suppress all prompts:
+
+```bash
+python installer.py --profile fastapi-rest --yes
+```
+
+Use `--force` to also suppress the overwrite prompt:
+
+```bash
+python installer.py --profile fastapi-rest --yes --force
+```
+
+---
+
+## What gets installed
+
+The installer copies three directories from the kit into `.claude/` and generates two files:
+
+| Source | Installed to | Description |
+|--------|-------------|-------------|
+| `skills/` | `.claude/skills/` | The `implement-us` skill and all phase files |
+| `templates/` | `.claude/templates/` | BDD, planning, testing, and reporting templates |
+| `tracking/` | `.claude/tracking/` | `time_tracker.py`, `commands.py`, `reports.py`, `track.py` |
+| *(generated)* | `.claude/config.json` | Merged base config + selected profile |
+| *(generated)* | `CLAUDE.md` | Project guide for Claude Code (only if missing) |
+
+### Generated config.json
+
+`config.json` is produced by merging `install/config.yaml` defaults with the selected profile's values:
+
+```json
+{
+  "version": "1.1",
+  "profile": "fastapi-rest",
+  "profile_name": "FastAPI + REST",
+  "installed_at": "2026-04-09T10:00:00",
+  "architecture_pattern": "layered",
+  "test_framework": "pytest",
+  "component_types": ["Router", "Service", "Repository", "Schema"],
+  "patterns": ["Dependency Injection", "Repository Pattern", "Service Layer"],
+  "variables": {
+    "base_class": "BaseModel",
+    "test_base_class": "TestClient",
+    "import_test_framework": "from fastapi.testclient import TestClient"
+  }
+}
+```
+
+---
+
+## Post-install validation
+
+After installation, the installer runs `scripts/validate-setup.py` to confirm the installation is complete. You can skip this with `--skip-validation`.
+
+The validator checks:
+
+**Required directories** (error if missing):
+
+```
+.claude/
+.claude/skills/
+.claude/skills/implement-us/
+.claude/templates/
+.claude/templates/bdd/
+.claude/templates/planning/
+.claude/templates/testing/
+.claude/templates/reporting/
+.claude/tracking/
+```
+
+**Required files** (error if missing):
+
+```
+.claude/config.json
+.claude/skills/implement-us/SKILL.md
+.claude/tracking/time_tracker.py
+.claude/tracking/commands.py
+.claude/tracking/__init__.py
+```
+
+**Optional files** (warning if missing):
+
+```
+CLAUDE.md
+.claude/hooks/save-session.sh
+.claude/hooks/check-session-start.sh
+```
+
+**Content checks:**
+
+- `.claude/config.json` is valid JSON
+- `.claude/config.json` contains the keys `profile` and `version`
+
+**Python import checks:**
+
+- `tracking` module imports without error
+- `tracking.time_tracker` imports without error
+- `tracking.commands` imports without error
+
+---
+
+## The install/config.yaml structure
+
+`config.yaml` is the source of truth for profile definitions, copy rules, and validation requirements.
+
+```yaml
+version: "1.1"
+
+profiles:
+  pyqt-mvc:
+    name: "PyQt + MVC"
+    description: "PyQt6 applications with MVC architecture"
+    architecture_pattern: "mvc"
+    test_framework: "pytest-qt"
+    component_types: [Panel, Model, Controller, Display]
+    patterns: [Factory, Coordinator, Observer]
+    variables:
+      base_class: "ModeloBase"
+      test_base_class: "QWidget"
+      import_test_framework: "from pytestqt.qtbot import QtBot"
+  # ... other profiles
+
+installation:
+  target_dir: ".claude"
+  create_claude_md: true
+  overwrite_policy: "ask"   # ask | skip | overwrite
+  copy_rules:
+    - source: "skills"
+      target: "{target_dir}/skills"
+      description: "Skills (implement-us, etc.)"
+    - source: "templates"
+      target: "{target_dir}/templates"
+      description: "Templates (BDD, planning, testing, reporting)"
+    - source: "tracking"
+      target: "{target_dir}/tracking"
+      description: "Time tracking system"
+
+validation:
+  required_dirs: [ ... ]
+  required_files: [ ... ]
+  optional_files: [ ... ]
+  content_checks: [ ... ]
+  python_imports: [ ... ]
+```
+
+<Note>
+  A Unix/macOS wrapper script is available at `install/install.sh` for users who prefer not to invoke Python directly.
+</Note>

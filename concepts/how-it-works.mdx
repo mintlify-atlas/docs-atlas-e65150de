@@ -1,0 +1,97 @@
+---
+title: "How Claude Dev Kit Works: The 10-Phase Skill Workflow"
+description: "The implement-us skill runs 10 sequential phases — from BDD to final report — with human approval gates at phases 2 and 9, and profile-driven output per stack."
+---
+
+When you run `/implement-us US-001`, the skill orchestrator reads `skill.md`, loads your active profile, and delegates each of the 10 phases to a specialized phase agent. The agents work sequentially — each phase produces a concrete output artifact that the next phase consumes. Two phases require explicit human approval before the workflow continues.
+
+## The 10 phases
+
+| Phase | Name | Output artifact |
+|-------|------|-----------------|
+| 0 | Validation | `docs/plans/{US_ID}-context.md` |
+| 1 | BDD scenario generation | `tests/features/{US_ID}-{name}.feature` |
+| 2 | Implementation plan | `docs/plans/{US_ID}-plan.md` |
+| 3 | Implementation | Source files under `src/` |
+| 4 | Unit tests | `tests/unit/test_*.py` |
+| 5 | Integration tests | `tests/integration/test_*.py` |
+| 6 | BDD validation | `tests/step_defs/test_*_steps.py` |
+| 7 | Quality gates | `quality/reports/{US_ID}-quality.json` |
+| 8 | Documentation | Updated docstrings, CHANGELOG, architecture docs |
+| 9 | Final report | `docs/reports/{US_ID}-report.md` |
+
+## High-level flow
+
+<Steps>
+  <Step title="Write your user story">
+    Create a markdown file at `docs/user-stories/US-001.md` with a description and acceptance criteria. The story is the only input the skill requires.
+  </Step>
+  <Step title="Run /implement-us">
+    Execute `/implement-us US-001` in Claude Code. The skill reads your story, validates the project setup (Phase 0), and starts automatic time tracking.
+  </Step>
+  <Step title="Review BDD scenarios (Phase 1 → approval gate)">
+    Phase 1 generates Gherkin scenarios from your acceptance criteria. The skill pauses for you to review the `.feature` file before continuing.
+  </Step>
+  <Step title="Approve the implementation plan (Phase 2 → approval gate)">
+    Phase 2 produces a detailed plan with components, estimated times, and a task checklist. The skill issues a blocking `STOP` — you must approve the plan before code is written.
+  </Step>
+  <Step title="Code, tests, and BDD validation run automatically">
+    Phases 3–6 run without interruption: code is generated from the approved plan, unit tests and integration tests are created, and BDD step definitions are executed against the scenarios.
+  </Step>
+  <Step title="Quality gates validate the output (Phase 7)">
+    Phase 7 runs Pylint, cyclomatic complexity (via radon), maintainability index, and coverage checks. Thresholds are read from your active profile — not hardcoded defaults.
+  </Step>
+  <Step title="Documentation is updated (Phase 8)">
+    Phase 8 adds missing docstrings, updates the CHANGELOG, and writes architecture decision records. The phase pauses for your review.
+  </Step>
+  <Step title="Final report is generated (Phase 9 → verification gate)">
+    Phase 9 consolidates metrics, time data, and quality results into a report at `docs/reports/{US_ID}-report.md`. The skill issues a second blocking `STOP` to verify the report exists on disk before closing the tracking session.
+  </Step>
+</Steps>
+
+## Orchestrator and phase agents
+
+The skill follows an **orchestrator + specialized agent** architecture:
+
+- **`skill.md`** is the orchestrator. It defines the overall flow, manages the phase sequence, and specifies the human approval gates.
+- **`phases/phase-N-*.md`** files are the phase agents. Each agent is an independent markdown instruction file that handles one phase in full — including entry gates, required actions, and an exit checklist.
+- **`customizations/{profile}.json`** files provide the profile-specific values (architecture pattern, component types, quality thresholds) that the phase agents substitute into templates.
+
+<Note>
+A phase agent with an incomplete exit checklist cannot advance to the next phase. The orchestrator protocol requires that every checklist item is verified, not assumed.
+</Note>
+
+## Human approval gates
+
+Two phases use a blocking `STOP` directive:
+
+**Phase 2 — plan approval.** The implementation plan lists every component to be created, the file paths, the estimated time per task, and an integration checklist. You review and approve (or modify) before any code is written.
+
+**Phase 9 — report verification.** After the final report is written to disk, the skill halts and confirms the file is present. This prevents the tracking session from closing against a missing artifact.
+
+Phase 1 (BDD scenarios) and Phase 8 (documentation) also request human review but are not hard-blocking stops.
+
+## How profiles customize each phase
+
+Each phase agent reads variables from the active profile rather than using hardcoded values. For example:
+
+- Phase 3 uses `{ARCHITECTURE_PATTERN}` and `{COMPONENT_PATH}` to decide where to write source files.
+- Phase 4 uses `{TEST_FRAMEWORK}` to generate the correct import statements and fixture patterns.
+- Phase 7 reads quality thresholds (`pylint.min_score`, `coverage.min_percent`) directly from the profile's `quality_gates` section.
+
+This means the same 10-phase flow produces idiomatic FastAPI layered-architecture code, PyQt MVC components, or hexagonal DDD bounded contexts — depending on which profile you installed.
+
+<CardGroup cols={2}>
+  <Card title="Stack profiles" icon="layer-group" href="/concepts/profiles">
+    See all 6 profiles and their quality gate thresholds.
+  </Card>
+  <Card title="Template system" icon="file-code" href="/concepts/templates">
+    Learn how variables and snippets are resolved per phase.
+  </Card>
+  <Card title="Time tracking" icon="clock" href="/concepts/tracking">
+    Understand how phases and tasks are recorded automatically.
+  </Card>
+  <Card title="implement-us skill" icon="wand-magic-sparkles" href="/skill/overview">
+    Full reference for the orchestrator and each phase agent.
+  </Card>
+</CardGroup>

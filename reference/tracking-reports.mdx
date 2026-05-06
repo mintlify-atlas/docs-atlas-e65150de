@@ -1,0 +1,248 @@
+---
+title: "Tracking reports: structure, variance, and JSON schema"
+description: "How tracking reports are structured, the JSON schema with real field names, variance calculation formula, and how to generate human-readable reports."
+---
+
+Every `/implement-us` session writes its measurements to a JSON file in `.claude/tracking/`. This page explains what that file contains, how variance is calculated, and how to turn raw data into a readable report.
+
+## The tracking JSON file
+
+Tracking data is persisted automatically after every operation. The file path follows the pattern:
+
+```
+.claude/tracking/{US_ID}-tracking.json
+```
+
+For example: `.claude/tracking/US-001-tracking.json`
+
+The file is updated in place after each call to `_save()` inside `TimeTracker`, so it always reflects the latest state — even if the session is still in progress.
+
+### Top-level structure
+
+```json
+{
+  "metadata": { ... },
+  "timeline": { ... },
+  "phases": [ ... ],
+  "pauses": [ ... ],
+  "summary": { ... }
+}
+```
+
+### metadata
+
+Identifies the user story and the product it belongs to.
+
+```json
+{
+  "metadata": {
+    "us_id": "US-001",
+    "us_title": "Implementar panel display",
+    "us_points": 3,
+    "producto": "ux_termostato",
+    "tracking_version": "1.0"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `us_id` | string | User story identifier, e.g. `"US-001"` |
+| `us_title` | string | Descriptive title of the user story |
+| `us_points` | integer | Story-point estimate |
+| `producto` | string | Product name, e.g. `"ux_termostato"` |
+| `tracking_version` | string | Schema version; currently `"1.0"` |
+
+### timeline
+
+Wall-clock and effective-time measurements for the full session.
+
+```json
+{
+  "timeline": {
+    "started_at": "2026-02-15T10:00:00+00:00",
+    "completed_at": "2026-02-15T11:45:00+00:00",
+    "total_elapsed_seconds": 6300,
+    "effective_seconds": 5400,
+    "paused_seconds": 900
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `started_at` | ISO 8601 | Timestamp when `start_tracking()` was called |
+| `completed_at` | ISO 8601 or `null` | Timestamp when `end_tracking()` was called; `null` if in progress |
+| `total_elapsed_seconds` | integer | `completed_at - started_at` in seconds |
+| `effective_seconds` | integer | `total_elapsed_seconds - paused_seconds` |
+| `paused_seconds` | integer | Sum of all `pause.duration_seconds` |
+
+### phases
+
+An array of phase objects, one per skill phase executed (0–9).
+
+```json
+{
+  "phases": [
+    {
+      "phase_number": 0,
+      "phase_name": "Validación de Contexto",
+      "started_at": "2026-02-15T10:00:00+00:00",
+      "completed_at": "2026-02-15T10:02:00+00:00",
+      "elapsed_seconds": 120,
+      "status": "completed",
+      "tasks": [],
+      "auto_approved": true,
+      "user_approval_time_seconds": 0
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `phase_number` | integer | Phase index 0–9 |
+| `phase_name` | string | Human-readable phase name |
+| `started_at` | ISO 8601 | Phase start timestamp |
+| `completed_at` | ISO 8601 or `null` | Phase end timestamp |
+| `elapsed_seconds` | integer | `completed_at - started_at` |
+| `status` | string | `"pending"`, `"in_progress"`, or `"completed"` |
+| `tasks` | array | List of task objects (see below) |
+| `auto_approved` | boolean | `true` if the phase advanced without manual user approval |
+| `user_approval_time_seconds` | integer | Seconds spent waiting at the approval gate |
+
+Each task inside `tasks` has these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `task_id` | string | Unique identifier, e.g. `"task_001"` |
+| `task_name` | string | Descriptive name, e.g. `"Implementar DisplayModelo"` |
+| `task_type` | string | One of: `modelo`, `vista`, `controlador`, `test` |
+| `estimated_minutes` | float | Time estimate from the implementation plan |
+| `started_at` | ISO 8601 or `null` | Task start timestamp |
+| `completed_at` | ISO 8601 or `null` | Task end timestamp |
+| `elapsed_seconds` | integer | Actual task duration |
+| `actual_minutes` | float | `elapsed_seconds / 60` |
+| `variance_minutes` | float | `actual_minutes - estimated_minutes` |
+| `file_created` | string or `null` | Path of the file produced by the task |
+| `status` | string | `"pending"`, `"in_progress"`, or `"completed"` |
+
+### pauses
+
+An array of manual pause objects recorded via `/track-pause`.
+
+```json
+{
+  "pauses": [
+    {
+      "pause_id": "pause_001",
+      "started_at": "2026-02-15T10:30:00+00:00",
+      "resumed_at": "2026-02-15T10:45:00+00:00",
+      "duration_seconds": 900,
+      "reason": "Daily standup"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pause_id` | string | Sequential identifier, e.g. `"pause_001"` |
+| `started_at` | ISO 8601 | When `/track-pause` was called |
+| `resumed_at` | ISO 8601 or `null` | When `/track-resume` was called; `null` if still paused |
+| `duration_seconds` | integer | `resumed_at - started_at`; `0` while active |
+| `reason` | string | Free-text reason provided to `/track-pause` |
+
+### summary
+
+Aggregated statistics computed from all phases and tasks.
+
+```json
+{
+  "summary": {
+    "total_tasks": 15,
+    "completed_tasks": 15,
+    "total_phases": 10,
+    "estimated_total_minutes": 120.0,
+    "actual_total_minutes": 105.0,
+    "variance_minutes": -15.0,
+    "variance_percent": -12.5
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_tasks` | integer | Count of all task objects across all phases |
+| `completed_tasks` | integer | Count of tasks with `status == "completed"` |
+| `total_phases` | integer | Count of phase objects in the `phases` array |
+| `estimated_total_minutes` | float | Sum of `task.estimated_minutes` for all tasks |
+| `actual_total_minutes` | float | Sum of `task.actual_minutes` for completed tasks |
+| `variance_minutes` | float | `actual_total_minutes - estimated_total_minutes` |
+| `variance_percent` | float | Percentage variance (see formula below) |
+
+---
+
+## Variance calculation
+
+Variance measures how actual implementation time compares to the estimate from the implementation plan.
+
+**Formula**
+
+```
+variance_percent = (actual_total_minutes - estimated_total_minutes) / estimated_total_minutes × 100
+```
+
+This is computed in `TimeTracker._to_dict()` and is also available as a property on individual `Task` objects:
+
+```python
+@property
+def variance_percent(self) -> float:
+    if self.estimated_minutes == 0:
+        return 0.0
+    return (self.variance_minutes / self.estimated_minutes) * 100
+```
+
+**How to read variance**
+
+| Value | Meaning |
+|-------|---------|
+| `+12.5%` | Took 12.5% longer than estimated |
+| `-12.5%` | Finished 12.5% faster than estimated |
+| `0%` | Matched the estimate exactly |
+
+**Variance threshold**
+
+A variance of ±20% is treated as within the normal range. Values outside this range trigger an insight in the generated markdown report:
+
+- Above `+25%`: a warning suggesting you review estimates for future stories of the same point value.
+- Below `-10%`: a positive note that the implementation was faster than expected.
+
+<Note>
+  The `variance_threshold_percent` concept (default 20%) is documented in the architecture but not yet exposed as a configurable key in `.claude/config.json`. The thresholds of `+25%` and `-10%` in `reports.py` are the effective defaults.
+</Note>
+
+---
+
+## Generating a human-readable report
+
+The `reports.py` module converts raw JSON into a formatted markdown report.
+
+```bash
+/track-report US-001
+```
+
+For a completed session, the full markdown report is written to:
+
+```
+docs/reports/{US_ID}-tracking-report.md
+```
+
+This file is generated automatically at the end of Phase 9. It includes:
+
+- A time summary table (total, effective, paused)
+- A phase table with duration and task count per phase
+- A pause log with reasons and durations
+- A final metrics table showing estimated vs. actual time and variance per-task and per-point
+
+You can also call `/track-report` without an argument during an active session to see an inline snapshot without waiting for Phase 9 to complete.

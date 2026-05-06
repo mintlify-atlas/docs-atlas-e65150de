@@ -1,0 +1,450 @@
+---
+title: 'Customizing Claude Dev Kit — Profiles and Variables'
+description: 'Select profiles, override quality gates, create custom profiles, and use {VARIABLE} placeholders to adapt Claude Dev Kit to any Python stack.'
+---
+
+Claude Dev Kit ships with five built-in profiles that pre-configure the `implement-us` skill for common Python stacks. Each profile is a JSON file that overrides variables, component structure, test framework plugins, and quality gate thresholds from the base `config.json`. You can use a profile as-is, tweak individual thresholds for your team, or create an entirely new profile by copying and modifying an existing one.
+
+## Available profiles
+
+| Profile | Stack | Architecture | Test framework | Coverage min |
+|---------|-------|--------------|----------------|-------------|
+| `pyqt-mvc` | PyQt6 desktop | MVC + Factory + Coordinator | pytest + pytest-qt | 90% |
+| `fastapi-rest` | FastAPI async API | Layered (Router → Service → Repository) | pytest + httpx + pytest-asyncio | 95% |
+| `flask-rest` | Flask REST API | Layered | pytest + pytest-flask | 95% |
+| `flask-webapp` | Flask fullstack | BFF + SSR | pytest + pytest-flask | 90% |
+| `generic-python` | Any Python project | Flexible / modular | pytest | 95% |
+| `hexagonal-ddd-bc` | Python (any framework) | Hexagonal + DDD, BC-first | pytest + httpx | 90% (domain+app only) |
+
+---
+
+## Selecting a profile during installation
+
+The installer prompts you to select a profile interactively:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py
+```
+
+To skip the prompt and pass a profile directly:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py --profile fastapi-rest
+```
+
+The installer copies the skill files, merges the selected profile into `config.json`, and writes the result to `.claude/config.json` in your project.
+
+---
+
+## Switching profiles after installation
+
+To switch to a different profile, update the `profile` key in `.claude/config.json` and re-run the installer, or edit the file directly:
+
+```json
+{
+  "profile": "flask-rest"
+}
+```
+
+Then re-run the installer with `--force` to merge the new profile:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py --profile flask-rest --force
+```
+
+<Warning>
+  Using `--force` will overwrite `.claude/skills/implement-us/config.json` with the new merged config. Back up any custom changes you have made to that file first.
+</Warning>
+
+---
+
+## Profile JSON structure
+
+Every profile JSON file lives in `.claude/skills/implement-us/customizations/` and follows the same structure. Fields you define override the corresponding keys in the base `config.json`; fields you omit inherit their defaults.
+
+The top-level sections a profile can override are:
+
+| Section | What it controls |
+|---------|-----------------|
+| `variables` | Template variable defaults (`architecture_pattern`, `component_path`, etc.) |
+| `component_structure` | File layout and class names generated in Phase 3 |
+| `test_framework_config` | Plugins, fixtures, markers, and coverage scope |
+| `quality_gates` | Pylint, cyclomatic complexity, maintainability index, and coverage thresholds |
+| `bdd_config` | Feature templates, step patterns, and tag prefix |
+| `documentation_config` | Output paths and diagram options |
+| `git_config` | Commit message template and branch naming |
+
+---
+
+## Profile deep-dive: fastapi-rest
+
+The `fastapi-rest.json` profile shows how a non-trivial stack maps to the skill's abstractions.
+
+<Tabs>
+  <Tab title="variables">
+    ```json
+    "variables": {
+      "architecture_pattern": {
+        "default": "layered",
+        "available": ["layered", "clean-architecture"],
+        "layers": {
+          "presentation": "Routers (FastAPI endpoints)",
+          "business": "Services (business logic)",
+          "data": "Repositories (data access)",
+          "models": "Models (Pydantic schemas + SQLAlchemy models)"
+        }
+      },
+      "component_type": {
+        "default": "Endpoint",
+        "available": ["Endpoint", "Service", "Repository", "Model", "Schema"]
+      },
+      "component_path": {
+        "default": "app/api/{name}/"
+      },
+      "test_framework": {
+        "default": "pytest + httpx",
+        "plugins": ["pytest-asyncio", "httpx", "pytest-cov", "pytest-bdd"]
+      },
+      "base_class": {
+        "default": "BaseModel"
+      },
+      "project_root": {
+        "default": "app/"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="component_structure">
+    ```json
+    "component_structure": {
+      "api_feature": {
+        "base_path": "app/api/{feature_name}/",
+        "files": {
+          "router":     { "filename": "router.py",     "class_name": "{FeatureName}Router" },
+          "service":    { "filename": "service.py",    "class_name": "{FeatureName}Service",    "base_class": "BaseService" },
+          "repository": { "filename": "repository.py", "class_name": "{FeatureName}Repository", "base_class": "BaseRepository" },
+          "schemas":    { "filename": "schemas.py" },
+          "models":     { "filename": "models.py",     "base_class": "Base (DeclarativeBase)" },
+          "init":       { "filename": "__init__.py" }
+        },
+        "test_files": {
+          "test_router":      "tests/api/test_{feature_name}_router.py",
+          "test_service":     "tests/services/test_{feature_name}_service.py",
+          "test_repository":  "tests/repositories/test_{feature_name}_repository.py",
+          "test_integration": "tests/integration/test_{feature_name}_e2e.py"
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="quality_gates">
+    ```json
+    "quality_gates": {
+      "pylint": {
+        "enabled": true,
+        "min_score": 8.5,
+        "exclude_patterns": ["tests/*", "app/db/migrations/*", "*/__init__.py"],
+        "disable_checks": [
+          "too-few-public-methods",
+          "too-many-arguments",
+          "redefined-outer-name"
+        ]
+      },
+      "maintainability_index": {
+        "enabled": true,
+        "min_score": 25,
+        "tool": "radon"
+      },
+      "coverage": {
+        "enabled": true,
+        "min_percent": 95.0,
+        "tool": "pytest-cov"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Profile deep-dive: generic-python
+
+The `generic-python` profile is intentionally minimal — it overrides only what differs from the generic defaults, making it a clean starting point for custom profiles:
+
+```json
+{
+  "profile_metadata": {
+    "name": "generic-python",
+    "display_name": "Generic Python Project",
+    "extends": "config.json",
+    "target_stack": "Python 3.8+",
+    "architecture": "Flexible - no forced architectural pattern"
+  },
+  "variables": {
+    "component_type": {
+      "default": "Module",
+      "available": ["Module", "Class", "Function", "Package", "Service", "Utility"]
+    },
+    "domain_context": {
+      "default": "core",
+      "alternatives": ["core", "domain", "lib", "utils", "services"]
+    }
+  },
+  "component_structure": {
+    "python_module": {
+      "base_path": "src/{module_name}/",
+      "files": {
+        "main": { "filename": "{module_name}.py" },
+        "init": { "filename": "__init__.py" }
+      },
+      "test_files": {
+        "test_main": "tests/test_{module_name}.py",
+        "test_integration": "tests/integration/test_{module_name}_integration.py"
+      }
+    }
+  }
+}
+```
+
+All quality gate thresholds fall back to the base config defaults (Pylint ≥ 8.0, CC ≤ 10, MI ≥ 20, coverage ≥ 95%).
+
+---
+
+## The `{VARIABLE_NAME}` system
+
+Every template file in `.claude/templates/` uses `{VARIABLE_NAME}` placeholders. When the skill renders a template, it replaces each placeholder with the resolved value from the active profile.
+
+### Resolution order
+
+Variables are resolved with the following priority (highest first):
+
+1. Profile customization JSON (`.claude/skills/implement-us/customizations/{profile}.json`)
+2. Base skill config (`.claude/skills/implement-us/config.json`)
+3. Hard-coded defaults in `skill.md`
+
+### Core template variables
+
+| Variable | Source | Example value (FastAPI) |
+|----------|--------|------------------------|
+| `{US_ID}` | Runtime (from invocation) | `US-042` |
+| `{US_TITLE}` | Runtime (from US description) | `Product catalog listing` |
+| `{ARCHITECTURE_PATTERN}` | `variables.architecture_pattern` | `layered` |
+| `{COMPONENT_TYPE}` | `variables.component_type` | `Endpoint` |
+| `{COMPONENT_PATH}` | `variables.component_path` | `app/api/{name}/` |
+| `{TEST_FRAMEWORK}` | `variables.test_framework` | `pytest + httpx` |
+| `{BASE_CLASS}` | `variables.base_class` | `BaseModel` |
+| `{DOMAIN_CONTEXT}` | `variables.domain_context` | `api` |
+| `{PROJECT_ROOT}` | `variables.project_root` | `app/` |
+| `{PRODUCT}` | `variables.product` | `catalog` |
+
+### Template variable syntax
+
+Use single curly braces — no spaces, no double braces:
+
+```markdown
+# Implementation Plan: {US_TITLE}
+
+Architecture: {ARCHITECTURE_PATTERN}
+
+Component path: {COMPONENT_PATH}
+```
+
+<Warning>
+  `{{US_ID}}` (double braces) and `$US_ID` (dollar sign) are **not** valid — they will not be replaced. Always use `{VARIABLE_NAME}`.
+</Warning>
+
+### Template variables in profile JSON
+
+Profiles can also define a `template_variables` section with multi-line values that map to specific placeholder names used inside templates:
+
+```json
+"template_variables": {
+  "BACKGROUND_SETUP": "    Given the API server is running\n    And environment variables are configured",
+  "ARCHITECTURE_DESCRIPTION": "Layered architecture implemented\n- Router: Defines REST endpoints\n- Service: Business logic\n- Schema: Pydantic validation",
+  "TEST_CLASS_ORGANIZATION_COMMENT": "Organization:\n- TestCreation: Initialization tests\n- TestMethods: Business logic tests\n- TestIntegration: REST endpoint tests (async)\n- TestValidation: Pydantic schema tests"
+}
+```
+
+### Snippets
+
+Snippets are named, multi-line code blocks defined in the profile's `snippets` section. Templates reference them with `{SNIPPET:snippet_name}`:
+
+```python
+# In a test template
+{SNIPPET:test_fixtures}
+```
+
+The corresponding snippet in the profile:
+
+```json
+"snippets": {
+  "test_fixtures": "@pytest.fixture\ndef mock_dependency():\n    mock = AsyncMock()\n    mock.method.return_value = expected_value\n    return mock"
+}
+```
+
+---
+
+## Creating a custom profile
+
+<Steps>
+  <Step title="Copy an existing profile as a base">
+    Choose the profile closest to your stack and copy it:
+
+    ```bash
+    cp .claude/skills/implement-us/customizations/generic-python.json \
+       .claude/skills/implement-us/customizations/my-profile.json
+    ```
+  </Step>
+
+  <Step title="Update profile_metadata">
+    Give the profile its own identity:
+
+    ```json
+    "profile_metadata": {
+      "name": "my-profile",
+      "display_name": "My Custom Stack",
+      "description": "Django REST Framework with MVT architecture",
+      "extends": "config.json",
+      "version": "1.0.0",
+      "target_stack": "Django 4.x + Python 3.11",
+      "architecture": "MVT (Model-View-Template)"
+    }
+    ```
+  </Step>
+
+  <Step title="Override variables for your stack">
+    Set the values that match your project's conventions:
+
+    ```json
+    "variables": {
+      "architecture_pattern": { "default": "mvt" },
+      "component_type": {
+        "default": "ViewSet",
+        "available": ["Serializer", "ViewSet", "Model", "Form"]
+      },
+      "component_path": { "default": "app/{name}/" },
+      "test_framework": { "default": "pytest-django" },
+      "base_class": { "default": "ModelViewSet" },
+      "project_root": { "default": "app/" }
+    }
+    ```
+  </Step>
+
+  <Step title="Define component_structure">
+    Describe the files the skill should generate for each component:
+
+    ```json
+    "component_structure": {
+      "django_feature": {
+        "base_path": "app/{feature_name}/",
+        "files": {
+          "model":      { "filename": "models.py",      "class_name": "{Feature}" },
+          "serializer": { "filename": "serializers.py", "class_name": "{Feature}Serializer" },
+          "viewset":    { "filename": "views.py",       "class_name": "{Feature}ViewSet" },
+          "urls":       { "filename": "urls.py" }
+        },
+        "test_files": {
+          "test_model":   "app/{feature_name}/tests/test_models.py",
+          "test_api":     "app/{feature_name}/tests/test_views.py"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Set quality gate thresholds">
+    Adjust thresholds to match your team's standards:
+
+    ```json
+    "quality_gates": {
+      "pylint": {
+        "enabled": true,
+        "min_score": 9.0
+      },
+      "coverage": {
+        "enabled": true,
+        "min_percent": 95.0
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Register the profile in config.json">
+    Update `.claude/config.json` to activate your new profile:
+
+    ```json
+    {
+      "profile": "my-profile"
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Practical example: raising the Pylint threshold for a strict team
+
+A team enforcing high code quality can raise the Pylint threshold above the base default of 8.0 without creating a full custom profile — just add an override to the existing profile file:
+
+```json
+{
+  "quality_gates": {
+    "pylint": {
+      "enabled": true,
+      "min_score": 9.5,
+      "config_file": ".pylintrc",
+      "exclude_patterns": ["tests/*", "migrations/*", "__pycache__/*"]
+    }
+  }
+}
+```
+
+After saving, Phase 7 will enforce the stricter threshold on every subsequent run.
+
+<Tip>
+  You can also tighten cyclomatic complexity and coverage together for a comprehensive "strict" configuration:
+
+  ```json
+  {
+    "quality_gates": {
+      "pylint":                { "min_score": 9.5 },
+      "cyclomatic_complexity": { "max_per_function": 6 },
+      "coverage":              { "min_percent": 98.0 }
+    }
+  }
+  ```
+</Tip>
+
+---
+
+## Troubleshooting
+
+**Profile not found during installation**
+
+List the available profile files and confirm the name matches exactly (without the `.json` extension):
+
+```bash
+ls .claude/skills/implement-us/customizations/
+# Output: fastapi-rest.json  flask-rest.json  flask-webapp.json  generic-python.json  pyqt-mvc.json
+
+python installer.py --profile flask-rest   # correct
+python installer.py --profile flask_rest   # wrong — underscores are not valid
+```
+
+**Template variables not replaced**
+
+Check that you are using the correct syntax:
+
+```markdown
+{US_ID}       ✅ correct
+{{US_ID}}     ❌ wrong — double braces
+$US_ID        ❌ wrong — dollar sign prefix
+```
+
+**Quality gate fails after raising threshold**
+
+Run Pylint locally to identify which files need improvement before the next skill run:
+
+```bash
+pylint src/ --fail-under=9.5
+```

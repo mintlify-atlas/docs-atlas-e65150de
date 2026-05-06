@@ -1,133 +1,79 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+title: "Claude Dev Kit: Automate User Story Implementation"
+description: "Claude Dev Kit is a domain-agnostic framework that automates the full user story implementation cycle with Claude Code across 10 structured phases."
 ---
 
-## Setting up
+Claude Dev Kit is a framework that automates the complete implementation lifecycle of user stories using Claude Code. From BDD scenario generation through code writing, testing, quality gates, and final reporting — all 10 phases are orchestrated by a single skill command, with automatic time tracking throughout.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Install Claude Dev Kit and implement your first user story in under 15 minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="How It Works" icon="circle-nodes" href="/concepts/how-it-works">
+    Understand the 10-phase workflow and how each phase builds on the last.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="implement-us Skill" icon="wand-magic-sparkles" href="/skill/overview">
+    The core skill that orchestrates all 10 phases — BDD, code, tests, quality gates, and reports.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Stack Profiles" icon="layer-group" href="/concepts/profiles">
+    Choose from 6 pre-built profiles: FastAPI, Flask, PyQt, generic Python, and hexagonal DDD.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What Claude Dev Kit automates
 
-Everything you need to create world-class documentation.
+Run `/implement-us US-001` and the framework handles all of this for you:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Context validation & BDD">
+    Phase 0 validates your tools and project setup. Phase 1 generates Gherkin scenarios from your user story's acceptance criteria.
+  </Step>
+  <Step title="Planning & implementation">
+    Phase 2 produces a detailed implementation plan (with a human approval gate). Phase 3 writes the code guided by that plan and your active stack profile.
+  </Step>
+  <Step title="Testing & quality gates">
+    Phases 4–6 generate unit tests, integration tests, and BDD step definitions. Phase 7 validates Pylint score, cyclomatic complexity, maintainability index, and coverage.
+  </Step>
+  <Step title="Documentation & final report">
+    Phase 8 updates docstrings and architecture docs. Phase 9 generates a complete implementation report with time metrics and quality gate results.
+  </Step>
+</Steps>
 
-## Make your content agent ready
+## Key features
 
-Make your docs work for humans and AI agents alike.
+<CardGroup cols={2}>
+  <Card title="Time tracking" icon="clock" href="/concepts/tracking">
+    Automatic per-phase and per-task time tracking with variance reporting against plan estimates.
+  </Card>
+  <Card title="Template system" icon="file-code" href="/concepts/templates">
+    35+ parameterized code snippets for BDD, planning, testing, and reporting — customized per stack.
+  </Card>
+  <Card title="Configuration reference" icon="gear" href="/guides/configuration">
+    Full reference for `config.json`, profile overrides, quality gate thresholds, and tracking options.
+  </Card>
+  <Card title="Changelog" icon="list-check" href="/reference/changelog">
+    Release history from v1.0.0 through v1.4.0 with detailed change notes.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
-  </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
-  </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
-  </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
-  </Card>
-</Columns>
+## Stack examples
 
-## Need inspiration?
+See Claude Dev Kit in action across different Python stacks:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={3}>
+  <Card title="FastAPI REST" icon="bolt" href="/examples/fastapi-rest">
+    Async TODO API — 29 tests, 98% coverage
+  </Card>
+  <Card title="Flask REST" icon="flask" href="/examples/flask-rest">
+    Contacts API — 38 tests, 94% coverage
+  </Card>
+  <Card title="Flask WebApp" icon="globe" href="/examples/flask-webapp">
+    Fullstack blog — 43 tests, 99% coverage
+  </Card>
+  <Card title="PyQt MVC" icon="desktop" href="/examples/pyqt-mvc">
+    Desktop calculator — 14 tests, 86% coverage
+  </Card>
+  <Card title="Generic Python" icon="python" href="/examples/generic-python">
+    CSV tool CLI — 90 tests, 98% coverage
+  </Card>
+</CardGroup>

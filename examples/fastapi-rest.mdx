@@ -1,0 +1,283 @@
+---
+title: "FastAPI REST example: building a TODO API step by step"
+description: "Walk through building a fully-tested TODO REST API with FastAPI using the fastapi-rest profile, layered architecture, and 98% test coverage."
+---
+
+This example shows how Claude Dev Kit's `/implement-us` skill builds a production-quality **TODO REST API** using FastAPI. Starting from a single user story, the framework generates Pydantic models, a layered Router → Service → Database architecture, a full async test suite, and quality gate validation — all in under six minutes.
+
+## Project overview
+
+| Property | Value |
+|---|---|
+| Stack | FastAPI + Python 3.10+ + async/await |
+| Architecture | Layered (Router → Service → Database) |
+| Test framework | pytest + httpx |
+| Minimum coverage | 95% |
+| Tests generated | 23 (10 unit, 13 integration) |
+| Actual coverage | 98% |
+| Pylint score | 9.71/10 |
+| Profile | `fastapi-rest` |
+
+## User story
+
+```markdown
+# US-002: Task API (TODO)
+
+As a frontend developer
+I want a REST API to manage tasks
+So I can build a complete TODO application
+```
+
+**Acceptance criteria:**
+
+- `GET /tasks` — list all tasks
+- `GET /tasks/{id}` — get task by ID
+- `POST /tasks` — create a new task with title and description
+- `PUT /tasks/{id}` — update a task (title, description, completed)
+- `DELETE /tasks/{id}` — delete a task
+- Automatic request validation with Pydantic
+- Interactive Swagger UI documentation
+- 404 error handling when a task does not exist
+
+## Implementation walkthrough
+
+<Steps>
+  <Step title="Install the fastapi-rest profile">
+    Run the installer in your project directory with the `fastapi-rest` profile. This configures the 10-phase skill with FastAPI-specific templates, quality gate thresholds, and test fixtures.
+
+    ```bash
+    python ~/.claude-dev-kit/install/installer.py --profile fastapi-rest --yes
+    ```
+
+    The installer sets `pylint >= 8.5`, `coverage >= 95%`, and cyclomatic complexity `< 10` as quality gates.
+  </Step>
+
+  <Step title="Create the user story file">
+    Place your user story in the `historias-usuario/` directory. The skill reads this file during Phase 0 validation.
+
+    ```bash
+    cat > historias-usuario/US-002.md << 'EOF'
+    # US-002: Task API (TODO)
+
+    As a frontend developer
+    I want a REST API to manage tasks
+    So I can build a complete TODO application
+
+    ## Acceptance Criteria
+
+    - GET /tasks - List all tasks
+    - GET /tasks/{id} - Get task by ID
+    - POST /tasks - Create new task with title and description
+    - PUT /tasks/{id} - Update task (title, description, completed)
+    - DELETE /tasks/{id} - Delete task
+    - Automatic validation
+    - Swagger UI documentation
+    - 404 handling when task does not exist
+
+    ## Technical Notes
+
+    - Framework: FastAPI
+    - Architecture: Layered (Router → Service → Database)
+    - Validation: Pydantic models
+    - Database: In-memory (dict) for demo
+    - Tests: pytest + httpx
+    EOF
+    ```
+  </Step>
+
+  <Step title="Run the skill">
+    Open Claude Code in your project directory and invoke the skill with the user story ID.
+
+    ```bash
+    /implement-us US-002
+    ```
+
+    The skill runs all 10 phases: context validation → BDD scenarios → implementation plan → code → unit tests → integration tests → BDD validation → quality gates → documentation → final report.
+  </Step>
+
+  <Step title="Review BDD scenarios (Phase 1)">
+    The skill generates six Gherkin scenarios covering the full CRUD surface. You approve or adjust them before implementation begins.
+
+    ```gherkin
+    Feature: Task Management API
+
+      Background:
+        Given the API is running
+        And the database is empty
+
+      Scenario: Create a new task
+        When I create a task with title "Buy milk" and description "Go to the supermarket"
+        Then the response status code should be 201
+        And the response should contain a task with title "Buy milk"
+        And the task should have an ID
+
+      Scenario: Get a specific task
+        Given I have created a task with title "My task"
+        When I request the task by ID
+        Then the response status code should be 200
+
+      Scenario: Delete a task
+        Given I have created a task with title "Task to delete"
+        When I delete the task by ID
+        Then the response status code should be 204
+        When I request the deleted task by ID
+        Then the response status code should be 404
+    ```
+  </Step>
+
+  <Step title="Implement the layered architecture (Phase 3)">
+    The skill generates four files in dependency order: Pydantic models → database layer → service layer → router layer. Each layer has a single responsibility:
+
+    - `app/models/task.py` — `TaskCreate`, `TaskUpdate`, `Task` (Pydantic)
+    - `app/database.py` — `TaskDatabase` (in-memory CRUD)
+    - `app/services/task_service.py` — `TaskService` (business logic, raises `HTTPException`)
+    - `app/routes/tasks.py` — `APIRouter` with five endpoints
+    - `main.py` — `FastAPI` app entry point
+  </Step>
+
+  <Step title="Run tests and check coverage (Phases 4–7)">
+    After generating unit tests and integration tests, run the full suite with coverage:
+
+    ```bash
+    pytest --cov=app --cov-report=term-missing
+    ```
+
+    Expected result: **23 passed, 98% coverage**.
+  </Step>
+</Steps>
+
+## Command used
+
+```bash
+/implement-us US-002
+```
+
+<Note>
+The profile used is `fastapi-rest`. This sets stricter quality gates than the base profile: Pylint ≥ 8.5 (vs 8.0) and maintainability index ≥ 25. To use a different profile, reinstall with `--profile <name>`.
+</Note>
+
+## Generated file structure
+
+```
+fastapi-todo-api/
+├── app/
+│   ├── __init__.py
+│   ├── models/
+│   │   └── task.py              # Pydantic schemas (49 lines)
+│   ├── routes/
+│   │   └── tasks.py             # REST endpoints (108 lines)
+│   ├── services/
+│   │   └── task_service.py      # Business logic (78 lines)
+│   └── database.py              # In-memory DB (106 lines)
+├── tests/
+│   ├── conftest.py              # Shared fixtures (31 lines)
+│   ├── test_task_service.py     # 10 unit tests (118 lines)
+│   └── test_endpoints.py        # 13 integration tests (233 lines)
+├── features/
+│   ├── tasks.feature            # 6 BDD scenarios (68 lines)
+│   └── steps/task_steps.py      # Step definitions (233 lines)
+├── main.py                      # Entry point (17 lines)
+├── requirements.txt
+└── pytest.ini
+```
+
+**Total: 43 files, 898 lines of Python.**
+
+## Test results
+
+```
+collected 23 items
+
+tests/test_task_service.py::TestTaskService::test_service_creation PASSED
+tests/test_task_service.py::TestTaskService::test_create_task PASSED
+tests/test_task_service.py::TestTaskService::test_get_task PASSED
+tests/test_task_service.py::TestTaskService::test_get_task_not_found PASSED
+tests/test_task_service.py::TestTaskService::test_get_all_tasks PASSED
+tests/test_task_service.py::TestTaskService::test_update_task PASSED
+tests/test_task_service.py::TestTaskService::test_update_task_partial PASSED
+tests/test_task_service.py::TestTaskService::test_update_task_not_found PASSED
+tests/test_task_service.py::TestTaskService::test_delete_task PASSED
+tests/test_task_service.py::TestTaskService::test_delete_task_not_found PASSED
+tests/test_endpoints.py::TestCreateTask::test_create_task PASSED
+tests/test_endpoints.py::TestCreateTask::test_create_task_without_description PASSED
+tests/test_endpoints.py::TestCreateTask::test_create_task_validation_error PASSED
+... (10 more)
+
+============================== 23 passed in 1.11s ==============================
+```
+
+## Quality gate results
+
+| Metric | Result | Threshold | Status |
+|---|---|---|---|
+| Tests passing | 23/23 (100%) | 100% | Pass |
+| Coverage | 98% | ≥ 95% | Pass |
+| Pylint score | 9.71/10 | ≥ 8.5 | Pass |
+| Cyclomatic complexity | A (1.32 avg) | < 10 | Pass |
+| Maintainability index | A (55–100) | ≥ 25 | Pass |
+
+## Key code snippet
+
+The async test pattern uses FastAPI's `TestClient` via `httpx`. The `conftest.py` fixture resets the in-memory database before and after every test, guaranteeing test isolation:
+
+```python
+# tests/conftest.py
+import pytest
+from fastapi.testclient import TestClient
+from main import app
+from app.database import _db_instance
+
+
+@pytest.fixture(autouse=True)
+def reset_database():
+    """Reset the database before and after each test."""
+    global _db_instance
+    if _db_instance:
+        _db_instance.clear()
+    yield
+    if _db_instance:
+        _db_instance.clear()
+
+
+@pytest.fixture
+def client():
+    """Provide a TestClient for integration tests."""
+    return TestClient(app)
+```
+
+Integration tests call endpoints directly and assert on HTTP status codes and JSON bodies:
+
+```python
+# tests/test_endpoints.py
+class TestCreateTask:
+    def test_create_task(self, client: TestClient):
+        task_data = {
+            "title": "Buy milk",
+            "description": "Go to the supermarket"
+        }
+        response = client.post("/tasks/", json=task_data)
+        assert response.status_code == 201
+
+        task = response.json()
+        assert task["id"] == 1
+        assert task["title"] == "Buy milk"
+        assert task["completed"] is False
+
+    def test_create_task_validation_error(self, client: TestClient):
+        """Pydantic rejects a request missing the required title field."""
+        response = client.post("/tasks/", json={"description": "Missing title"})
+        assert response.status_code == 422  # Unprocessable Entity
+```
+
+<Tip>
+Because FastAPI validates request bodies with Pydantic at the framework level, you get `422 Unprocessable Entity` automatically for missing or malformed fields. The service layer never needs to duplicate that validation logic.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="Flask REST API example" icon="flask" href="/examples/flask-rest">
+    See the same layered pattern built with synchronous Flask, the Repository + Mapper patterns, and 38 tests at 94% coverage.
+  </Card>
+  <Card title="Generic Python example" icon="python" href="/examples/generic-python">
+    Explore a CSV processing CLI built with Python stdlib only, 90 tests, and a perfect Pylint 10.00/10 score.
+  </Card>
+</CardGroup>

@@ -1,0 +1,457 @@
+---
+title: "Install Claude Dev Kit on Linux, macOS, and Windows"
+description: "Install Claude Dev Kit on Linux, macOS, or Windows. CLI flags, interactive mode, installed file tree, post-install validation, and troubleshooting all covered."
+---
+
+Claude Dev Kit installs into your Python project's `.claude/` directory by copying the `skills/`, `templates/`, and `tracking/` modules from the cloned repository, then generating a profile-specific `config.json`. The installer is a single Python script — `installer.py` — that runs on Linux, macOS, and Windows without additional dependencies beyond the Python standard library and PyYAML.
+
+## Prerequisites
+
+Confirm all three tools are available before running the installer:
+
+```bash
+python --version   # Must be 3.9 or higher
+git --version      # Must be 2.0 or higher
+claude --version   # Claude Code CLI must be installed
+```
+
+<Warning>
+  The installer checks Python version at startup and exits with an error if the version is below 3.8. The skill itself requires Python 3.9+. If your system has multiple Python versions, invoke the installer with the correct binary explicitly: `python3.11 ~/.claude-dev-kit/install/installer.py`
+</Warning>
+
+## Platform installation
+
+<Tabs>
+
+  <Tab title="Linux">
+
+    The following steps apply to Ubuntu, Debian, Fedora, RHEL, and other Linux distributions.
+
+    **Install prerequisites (Ubuntu/Debian):**
+
+    ```bash
+    sudo apt update
+    sudo apt install python3 python3-pip git
+    ```
+
+    **Install prerequisites (Fedora/RHEL):**
+
+    ```bash
+    sudo dnf install python3 git
+    ```
+
+    **Clone the kit and install:**
+
+    ```bash
+    # Clone Claude Dev Kit to a global location
+    git clone https://github.com/vvalotto/claude-dev-kit.git ~/.claude-dev-kit
+
+    # Navigate to your project
+    cd ~/projects/my-project
+
+    # Run the installer (interactive mode)
+    python ~/.claude-dev-kit/install/installer.py
+    ```
+
+    **Post-install validation:**
+
+    ```bash
+    python ~/.claude-dev-kit/scripts/validate-setup.py
+    ```
+
+  </Tab>
+
+  <Tab title="macOS">
+
+    **Install prerequisites via Homebrew:**
+
+    ```bash
+    # Install Homebrew if not already present
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    brew install python3 git
+    ```
+
+    **Clone the kit and install:**
+
+    ```bash
+    # Clone Claude Dev Kit to a global location
+    git clone https://github.com/vvalotto/claude-dev-kit.git ~/.claude-dev-kit
+
+    # Navigate to your project
+    cd ~/Projects/my-project
+
+    # Run the installer (interactive mode)
+    python ~/.claude-dev-kit/install/installer.py
+    ```
+
+    **Post-install validation:**
+
+    ```bash
+    python3 ~/.claude-dev-kit/scripts/validate-setup.py
+    ```
+
+  </Tab>
+
+  <Tab title="Windows">
+
+    **Install prerequisites:**
+
+    1. Download Python 3.9+ from [python.org/downloads](https://www.python.org/downloads/) — mark **Add Python to PATH** during setup.
+    2. Download Git from [git-scm.com](https://git-scm.com/download/win) and install with default options.
+
+    **Clone the kit and install (PowerShell):**
+
+    ```powershell
+    # Clone Claude Dev Kit
+    git clone https://github.com/vvalotto/claude-dev-kit.git C:\claude-dev-kit
+
+    # Navigate to your project
+    cd C:\Projects\my-project
+
+    # Run the installer (interactive mode)
+    python C:\claude-dev-kit\install\installer.py
+    ```
+
+    **Post-install validation:**
+
+    ```powershell
+    python C:\claude-dev-kit\scripts\validate-setup.py
+    ```
+
+    <Note>
+      On Windows, use `C:\claude-dev-kit\install\installer.py` as the installer path throughout this guide instead of `~/.claude-dev-kit/install/installer.py`.
+    </Note>
+
+  </Tab>
+
+</Tabs>
+
+## Interactive vs non-interactive mode
+
+The installer supports two modes. Interactive mode is the default and recommended for first-time setup. Non-interactive mode is designed for CI/CD pipelines and scripted environments.
+
+### Interactive mode
+
+Running the installer without flags launches the profile selector:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py
+```
+
+The installer prompts you to choose from the five available profiles, then confirms before writing files:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 Claude Dev Kit - Installer v1.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Perfiles disponibles:
+
+1. PyQt + MVC (pyqt-mvc)
+   PyQt6 applications with MVC architecture
+
+2. FastAPI + REST (fastapi-rest)
+   FastAPI REST APIs with layered architecture
+
+3. Flask REST API (flask-rest)
+   Flask REST APIs with layered architecture (Services → Domain → Data)
+
+4. Flask WebApp (flask-webapp)
+   Flask fullstack webapps with Jinja2 templates and SSR
+
+5. Generic Python (generic-python)
+   Generic Python projects without specific framework
+
+Selecciona un perfil [1-5]:
+```
+
+### Non-interactive mode
+
+Use flags to bypass all prompts. This is suitable for scripts, CI pipelines, and automated provisioning:
+
+```bash
+# Install with a specific profile, accept all confirmations
+python ~/.claude-dev-kit/install/installer.py --profile fastapi-rest --yes
+
+# Preview what would be installed without making changes
+python ~/.claude-dev-kit/install/installer.py --profile flask-rest --dry-run
+
+# Overwrite an existing .claude/ installation
+python ~/.claude-dev-kit/install/installer.py --profile pyqt-mvc --force --yes
+
+# Install into a specific project directory
+python ~/.claude-dev-kit/install/installer.py \
+  --profile generic-python \
+  --target /path/to/other-project \
+  --yes
+
+# CI/CD: no color output, no prompts, skip post-install validation
+python ~/.claude-dev-kit/install/installer.py \
+  --profile generic-python \
+  --yes \
+  --no-color \
+  --skip-validation
+```
+
+### CLI flag reference
+
+All flags available in `installer.py`:
+
+| Flag | Description |
+|------|-------------|
+| `--profile PROFILE` | Profile to install: `pyqt-mvc`, `fastapi-rest`, `flask-rest`, `flask-webapp`, `generic-python` |
+| `--yes` / `-y` | Accept all confirmation prompts automatically |
+| `--dry-run` | Show what would be installed without writing any files |
+| `--force` | Overwrite an existing `.claude/` directory without prompting |
+| `--config PATH` | Use a custom `config.yaml` instead of the default |
+| `--target DIR` | Install into a specific project directory (default: current directory) |
+| `--no-color` | Disable ANSI color output (useful in CI logs) |
+| `--skip-validation` | Skip post-installation validation |
+
+## What gets installed to `.claude/`
+
+After a successful installation, the `.claude/` directory contains:
+
+```
+.claude/
+├── config.json              # Profile-specific configuration (generated)
+├── skills/
+│   └── implement-us/        # The implement-us skill (10 phases + profile customizations)
+│       ├── skill.md
+│       ├── artifacts.md
+│       ├── conventions.md
+│       ├── config.json
+│       ├── phases/          # phase-0-validation.md … phase-9-final-report.md
+│       └── customizations/  # pyqt-mvc.json, fastapi-rest.json, etc.
+├── templates/
+│   ├── bdd/                 # Gherkin scenario templates
+│   ├── planning/            # Implementation plan templates
+│   ├── testing/             # Unit and integration test templates
+│   └── reporting/           # Final report templates
+└── tracking/
+    ├── time_tracker.py      # Core tracking engine
+    ├── commands.py          # /track-* command implementations
+    └── reports.py           # Report generation
+```
+
+The installer also generates a `CLAUDE.md` file at your project root if one does not already exist. This file provides Claude Code with project-specific context including the active stack, architecture pattern, and available skills.
+
+The generated `config.json` merges the base configuration with your selected profile:
+
+```json
+{
+  "version": "1.1",
+  "profile": "fastapi-rest",
+  "profile_name": "FastAPI + REST",
+  "installed_at": "2026-05-06T10:30:00",
+  "architecture_pattern": "layered",
+  "test_framework": "pytest",
+  "component_types": ["Router", "Service", "Repository", "Schema"],
+  "patterns": ["Dependency Injection", "Repository Pattern", "Service Layer"],
+  "variables": {
+    "base_class": "BaseModel",
+    "test_base_class": "TestClient",
+    "import_test_framework": "from fastapi.testclient import TestClient"
+  }
+}
+```
+
+## Post-install validation
+
+Run the validation script to confirm all required files and directories are in place:
+
+```bash
+python ~/.claude-dev-kit/scripts/validate-setup.py
+```
+
+A successful installation produces:
+
+```
+✅ Python 3.9+ detected
+✅ Git installed
+✅ Claude Code installed
+✅ .claude/ directory exists
+✅ .claude/skills/implement-us/ present
+✅ .claude/templates/ present (bdd, planning, testing, reporting)
+✅ .claude/tracking/ present
+✅ .claude/config.json valid JSON with required keys
+
+✅ Installation valid — ready to use /implement-us
+```
+
+The validator checks the following required directories and files as defined in `install/config.yaml`:
+
+**Required directories:** `.claude`, `.claude/skills`, `.claude/skills/implement-us`, `.claude/templates`, `.claude/templates/bdd`, `.claude/templates/planning`, `.claude/templates/testing`, `.claude/templates/reporting`, `.claude/tracking`
+
+**Required files:** `.claude/config.json`, `.claude/skills/implement-us/SKILL.md`, `.claude/tracking/time_tracker.py`, `.claude/tracking/commands.py`, `.claude/tracking/__init__.py`
+
+## Troubleshooting
+
+<AccordionGroup>
+
+  <Accordion title="Python not found or version too old">
+
+    **Symptom:**
+    ```
+    Error: Python 3 is not installed or not in PATH
+    ```
+    or
+    ```
+    Error: Python 3.7 is not compatible. Python 3.8 or higher required.
+    ```
+
+    **Fix:**
+
+    <Tabs>
+      <Tab title="Ubuntu/Debian">
+        ```bash
+        sudo apt update && sudo apt install python3.11
+        python3.11 ~/.claude-dev-kit/install/installer.py
+        ```
+      </Tab>
+      <Tab title="macOS">
+        ```bash
+        brew install python3
+        # or upgrade an existing installation
+        brew upgrade python3
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Download the latest installer from [python.org](https://www.python.org/downloads/) and run it, making sure **Add Python to PATH** is checked.
+      </Tab>
+    </Tabs>
+
+  </Accordion>
+
+  <Accordion title=".claude/ directory already exists">
+
+    **Symptom:**
+    ```
+    ⚠️  El directorio .claude/ ya existe.
+    ```
+
+    The installer pauses and asks whether to overwrite. You have three options:
+
+    ```bash
+    # Option 1: Use --force to overwrite automatically
+    python ~/.claude-dev-kit/install/installer.py --profile pyqt-mvc --force --yes
+
+    # Option 2: Remove manually before reinstalling
+    rm -rf .claude/
+    python ~/.claude-dev-kit/install/installer.py
+
+    # Option 3: Check what profile is currently installed
+    cat .claude/config.json
+    ```
+
+  </Accordion>
+
+  <Accordion title="Permission denied writing to .claude/">
+
+    **Symptom:**
+    ```
+    PermissionError: [Errno 13] Permission denied: '.claude/'
+    ```
+
+    **Fix (Linux/macOS):**
+    ```bash
+    # Check ownership of the project directory
+    ls -la
+
+    # Fix ownership if needed
+    sudo chown -R $USER:$USER .
+
+    # Re-run the installer
+    python ~/.claude-dev-kit/install/installer.py
+    ```
+
+    **Fix (Windows):** Run PowerShell as Administrator, or adjust the folder permissions via right-click → Properties → Security.
+
+  </Accordion>
+
+  <Accordion title="installer.py not found">
+
+    **Symptom:**
+    ```
+    Error: No such file or directory: '~/.claude-dev-kit/install/installer.py'
+    ```
+
+    The repository was not cloned or was cloned to a different path.
+
+    ```bash
+    # Verify the file exists
+    ls ~/.claude-dev-kit/install/installer.py
+
+    # If missing, clone the repository
+    git clone https://github.com/vvalotto/claude-dev-kit.git ~/.claude-dev-kit
+    ```
+
+  </Accordion>
+
+  <Accordion title="Validation fails after installation">
+
+    **Symptom:**
+    ```
+    ❌ INSTALLATION INCOMPLETE
+    ```
+
+    Run the validator with verbose output to see which files or directories are missing:
+
+    ```bash
+    python ~/.claude-dev-kit/scripts/validate-setup.py --verbose
+    ```
+
+    Then reinstall with `--force` to repair the installation:
+
+    ```bash
+    python ~/.claude-dev-kit/install/installer.py --profile YOUR_PROFILE --force --yes
+    ```
+
+  </Accordion>
+
+  <Accordion title="/implement-us command not found after installation">
+
+    **Symptom:**
+    ```
+    Command not found: /implement-us
+    ```
+
+    **Steps to fix:**
+
+    1. Verify the skill directory exists: `ls .claude/skills/implement-us/`
+    2. If missing, reinstall: `python ~/.claude-dev-kit/install/installer.py --yes`
+    3. Restart Claude Code — skills are loaded at session start
+    4. Confirm with `/help` that `/implement-us` appears in the skill list
+
+  </Accordion>
+
+</AccordionGroup>
+
+## Updating and uninstalling
+
+**Update to a new version:**
+
+```bash
+# Pull the latest framework version
+cd ~/.claude-dev-kit
+git pull origin main
+
+# Re-run the installer in your project to update .claude/
+cd ~/my-project
+python ~/.claude-dev-kit/install/installer.py --profile YOUR_PROFILE --force --yes
+```
+
+**Uninstall from a project:**
+
+```bash
+# Remove the framework from a single project
+rm -rf .claude/
+
+# Also remove the global clone if no longer needed
+rm -rf ~/.claude-dev-kit
+```
+
+<Note>
+  Uninstalling removes the `.claude/` directory but does not touch your source code, tests, or any artifacts generated by previous `/implement-us` runs.
+</Note>

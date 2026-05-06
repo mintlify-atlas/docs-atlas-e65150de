@@ -1,0 +1,353 @@
+---
+title: "Generic Python example: CSV processing CLI with 90 tests"
+description: "Build a modular CSV CLI with Python stdlib only, 4 subcommands, 90 tests, 98% coverage, and a Pylint 10.00/10 score using the generic-python profile."
+---
+
+This example shows how Claude Dev Kit's `/implement-us` skill builds a **CSV processing CLI tool** using the `generic-python` profile. The profile imposes no specific framework — it favors modular design, a `src/` layout, and pure Python stdlib. The result is a four-subcommand CLI (`convert`, `filter`, `merge`, `stats`) backed by 90 tests, 98% coverage, and a perfect Pylint score of 10.00/10.
+
+## Project overview
+
+| Property | Value |
+|---|---|
+| Stack | Python 3.10+ (stdlib only: `csv`, `json`, `argparse`, `statistics`) |
+| Architecture | Modular CLI (commands/ + models/ + utils/) |
+| Test framework | pytest + pytest-bdd |
+| Minimum coverage | 95% |
+| Tests generated | 90 (60 unit, 20 integration, 10 BDD) |
+| Actual coverage | 98% |
+| Pylint score | 10.00/10 |
+| Profile | `generic-python` |
+
+## User story
+
+```markdown
+# US-057: CSV File Utility
+
+As a data analyst,
+I want a CLI utility to manipulate CSV files
+So I can automate data processing tasks
+```
+
+**Acceptance criteria:**
+
+- `csvtool convert <input.csv> <output.json>` — export CSV to JSON
+- `csvtool filter <input.csv> <column> <value>` — filter rows by column value
+- `csvtool merge <file1.csv> <file2.csv> <output.csv>` — combine CSV files
+- `csvtool stats <input.csv>` — display file statistics
+- Descriptive error messages for file validation failures
+- Help message with usage examples
+- Exit codes: 0 = success, 1 = error
+
+## Subcommand reference
+
+| Subcommand | Input | Output | Error cases |
+|---|---|---|---|
+| `convert` | CSV file, output path | JSON file | File not found, invalid extension |
+| `filter` | CSV file, column, value | Filtered rows to stdout | Column not found |
+| `merge` | Two+ CSV files, output path | Merged CSV file | Incompatible headers |
+| `stats` | CSV file | Statistics to stdout | File not found |
+
+## Implementation walkthrough
+
+<Steps>
+  <Step title="Install the generic-python profile">
+    The `generic-python` profile uses minimal configuration — it inherits base quality gate defaults (Pylint ≥ 8.0, coverage ≥ 95%, CC < 10) and imposes no architectural constraints. This gives Claude maximum flexibility to design the right structure for the problem.
+
+    ```bash
+    python ~/.claude-dev-kit/install/installer.py --profile generic-python --yes
+    ```
+  </Step>
+
+  <Step title="Create test fixtures">
+    Create sample CSV files that tests will use. The `stats` subcommand reports numeric column averages, so include numeric fields.
+
+    ```bash
+    mkdir -p tests/fixtures
+
+    cat > tests/fixtures/sample1.csv << 'EOF'
+    name,age,city,score,active
+    Juan Pérez,28,Madrid,85.5,true
+    María García,34,Barcelona,92.0,true
+    Pedro López,22,Madrid,78.3,false
+    Ana Martínez,45,Valencia,88.7,true
+    Carlos Ruiz,31,Madrid,67.2,false
+    EOF
+
+    cat > tests/fixtures/sample2.csv << 'EOF'
+    name,age,city,score,active
+    Laura Sánchez,27,Sevilla,91.0,true
+    Miguel Torres,38,Madrid,73.5,false
+    Isabel Díaz,29,Barcelona,86.8,true
+    EOF
+    ```
+  </Step>
+
+  <Step title="Create the user story file and run the skill">
+    ```bash
+    cat > historias-usuario/US-057.md << 'EOF'
+    # US-057: CSV File Utility
+
+    As a data analyst,
+    I want a CLI utility to manipulate CSV files
+    So I can automate data processing tasks
+
+    ## Acceptance Criteria
+
+    - csvtool convert <input.csv> <output.json>
+    - csvtool filter <input.csv> <column> <value>
+    - csvtool merge <file1.csv> <file2.csv> <output.csv>
+    - csvtool stats <input.csv>
+    - Validation with descriptive error messages
+    - Help message with usage examples
+    - Exit code: 0 success, 1 error
+
+    ## Technical Notes
+
+    - Python stdlib only (csv, json, argparse, statistics)
+    - Modular architecture: commands/ + models/ + utils/
+    - Tests: pytest + pytest-bdd
+    EOF
+
+    /implement-us US-057
+    ```
+  </Step>
+
+  <Step title="Review the architectural decision (Phase 2)">
+    The skill generates an ADR (`ADR-001-csvtool-modular-architecture.md`) documenting why a modular package beats a monolithic script:
+
+    - A single script violates SRP and cannot be tested per subcommand
+    - The `click` framework was rejected to honor the "stdlib only" constraint
+    - Each command module is independently testable without invoking the CLI parser
+    - `CsvData` is a shared type imported by all command modules
+  </Step>
+
+  <Step title="Implement the modular package (Phase 3)">
+    Seven Python files are generated in dependency order:
+
+    1. **`csvtool/models/csv_data.py`** — `CsvData` dataclass with `row_count`, `column_count`, and `numeric_columns` properties
+    2. **`csvtool/utils/validators.py`** — `validate_file_exists()`, `validate_csv_extension()`, `validate_output_path()`
+    3. **`csvtool/commands/convert.py`** — `convert_csv_to_json()` returning row count
+    4. **`csvtool/commands/filter_cmd.py`** — `filter_csv()` returning a `CsvData`
+    5. **`csvtool/commands/merge.py`** — `merge_csv_files()` validating header compatibility
+    6. **`csvtool/commands/stats.py`** — `calculate_stats()` and `format_stats()` using `statistics.mean()`
+    7. **`csvtool/cli.py`** — `create_parser()` and `run()` dispatcher, returns int exit code
+  </Step>
+
+  <Step title="Run the full test suite (Phases 4–7)">
+    ```bash
+    pytest tests/ --cov=csvtool --cov-report=term-missing -q
+    ```
+
+    Expected result: **90 passed, 98% coverage**.
+
+    ```bash
+    pylint csvtool/
+    # Your code has been rated at 10.00/10
+    ```
+  </Step>
+</Steps>
+
+## Command used
+
+```bash
+/implement-us US-057
+```
+
+<Note>
+The `generic-python` profile is the right choice when your project does not fit a specific framework. The skill adapts the 10-phase process to any Python codebase — libraries, automation scripts, data pipelines, or microservices — without forcing architectural patterns.
+</Note>
+
+## Generated file structure
+
+```
+csv-tool/
+├── csvtool/
+│   ├── __init__.py              # Package metadata (4 lines)
+│   ├── __main__.py              # Entry point for python -m csvtool (5 lines)
+│   ├── cli.py                   # Argparse + dispatcher (90 lines)
+│   ├── commands/
+│   │   ├── convert.py           # CSV → JSON (45 lines)
+│   │   ├── filter_cmd.py        # Row filtering (43 lines)
+│   │   ├── merge.py             # File merging (58 lines)
+│   │   └── stats.py             # Statistics (90 lines)
+│   ├── models/
+│   │   └── csv_data.py          # CsvData dataclass (58 lines)
+│   └── utils/
+│       └── validators.py        # File validators (62 lines)
+├── tests/
+│   ├── conftest.py              # Shared fixtures
+│   ├── test_csv_data.py         # 10 unit tests
+│   ├── test_validators.py       # 10 unit tests
+│   ├── test_convert.py          # 7 unit tests
+│   ├── test_filter.py           # 10 unit tests
+│   ├── test_merge.py            # 8 unit tests
+│   ├── test_stats.py            # 15 unit tests
+│   ├── test_cli_integration.py  # 20 integration tests
+│   ├── test_bdd_csvtool.py      # 10 BDD tests
+│   └── fixtures/
+│       ├── sample1.csv          # 5 rows
+│       └── sample2.csv          # 3 rows
+├── features/
+│   ├── csvtool.feature          # 10 BDD scenarios (56 lines)
+│   └── steps/csvtool_steps.py   # Step definitions (86 lines)
+├── docs/
+│   ├── planning/US-057-plan.md
+│   └── architecture/ADR-001-csvtool-modular-architecture.md
+├── pytest.ini
+└── requirements.txt
+```
+
+**Total: 33 files, 455 lines of source + 700+ lines of tests.**
+
+## Test results
+
+```
+tests/test_bdd_csvtool.py::test_convert_csv_to_json_successfully PASSED
+tests/test_bdd_csvtool.py::test_filter_csv_by_column_value PASSED
+tests/test_bdd_csvtool.py::test_merge_two_csv_files PASSED
+tests/test_bdd_csvtool.py::test_show_csv_statistics PASSED
+... (6 more BDD tests)
+tests/test_cli_integration.py::TestCliConvert::test_convert_exit_code_zero PASSED
+tests/test_cli_integration.py::TestCliConvert::test_convert_creates_json_file PASSED
+tests/test_cli_integration.py::TestCliStats::test_stats_output_has_rows PASSED
+... (17 more integration tests)
+tests/test_stats.py::TestCalculateStats::test_returns_correct_row_count PASSED
+... (14 more unit tests)
+
+============================== 90 passed in 0.68s ==============================
+```
+
+## Quality gate results
+
+| Metric | Result | Threshold | Status |
+|---|---|---|---|
+| Tests passing | 90/90 (100%) | 100% | Pass |
+| Coverage | 98% | ≥ 95% | Pass |
+| Pylint score | 10.00/10 | ≥ 8.0 | Pass |
+| Cyclomatic complexity | A (3.47 avg) | < 10 | Pass |
+| Maintainability index | A (all modules) | ≥ 20 | Pass |
+
+<Note>
+The two uncovered statements in `csvtool/__main__.py` are `sys.exit(run())` — the entry point executed only when you run `python -m csvtool`. This code path does not run during pytest. The remaining 186 statements are fully covered.
+</Note>
+
+## Key code snippet
+
+The `CsvData` dataclass uses a `@property` to identify numeric columns at read time, avoiding any storage of pre-computed state:
+
+```python
+# csvtool/models/csv_data.py
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+
+@dataclass
+class CsvData:
+    """Represents the content of a CSV file.
+
+    Attributes:
+        headers: List of column names.
+        rows: List of rows, each row is a dict mapping header -> value.
+    """
+    headers: List[str]
+    rows: List[Dict[str, str]] = field(default_factory=list)
+
+    @property
+    def row_count(self) -> int:
+        """Return the number of data rows."""
+        return len(self.rows)
+
+    @property
+    def column_count(self) -> int:
+        """Return the number of columns."""
+        return len(self.headers)
+
+    @property
+    def numeric_columns(self) -> Dict[str, List[float]]:
+        """Return columns whose values are all numeric."""
+        result: Dict[str, List[float]] = {}
+        for header in self.headers:
+            values = []
+            all_numeric = True
+            for row in self.rows:
+                try:
+                    values.append(float(row.get(header, "")))
+                except ValueError:
+                    all_numeric = False
+                    break
+            if all_numeric and values:
+                result[header] = values
+        return result
+```
+
+The `stats` command uses `numeric_columns` to compute averages with `statistics.mean()` — no external libraries required:
+
+```python
+# csvtool/commands/stats.py
+import csv
+import statistics
+from typing import Any, Dict
+from csvtool.models.csv_data import CsvData
+from csvtool.utils.validators import validate_file_exists, validate_csv_extension
+
+
+def calculate_stats(input_path: str) -> Dict[str, Any]:
+    """Calculate statistics: rows, columns, numeric averages, missing values."""
+    validate_file_exists(input_path)
+    validate_csv_extension(input_path)
+
+    with open(input_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        data = CsvData(headers=list(reader.fieldnames or []), rows=list(reader))
+
+    numeric_stats = {
+        col: {
+            "avg": round(statistics.mean(vals), 2),
+            "min": min(vals),
+            "max": max(vals)
+        }
+        for col, vals in data.numeric_columns.items()
+    }
+    missing = sum(1 for row in data.rows for val in row.values() if val == "")
+
+    return {
+        "file": input_path,
+        "rows": data.row_count,
+        "columns": data.column_count,
+        "column_names": data.headers,
+        "numeric_stats": numeric_stats,
+        "missing_values": missing,
+    }
+```
+
+Running the CLI manually against the sample fixture:
+
+```bash
+python -m csvtool stats tests/fixtures/sample1.csv
+# File: tests/fixtures/sample1.csv
+# Rows: 5
+# Columns: 5 (name, age, city, score, active)
+# Numeric columns:
+#   age: avg=32.0, min=22.0, max=45.0
+#   score: avg=82.34, min=67.2, max=92.0
+# Missing values: 0
+
+python -m csvtool filter tests/fixtures/sample1.csv city Madrid
+# Juan Pérez,28,Madrid,85.5,true
+# Pedro López,22,Madrid,78.3,false
+# Carlos Ruiz,31,Madrid,67.2,false
+# (stderr): Filtered 3 rows where city=Madrid
+```
+
+<Tip>
+To extend the tool with pandas for large files, swap out the `convert_csv_to_json` implementation while keeping the same function signature. All 90 tests continue to pass unchanged because the test layer calls functions, not the internal `csv.DictReader` calls.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="FastAPI REST example" icon="bolt" href="/examples/fastapi-rest">
+    See how the same modular thinking applies to a web API with FastAPI's layered architecture.
+  </Card>
+  <Card title="Flask REST example" icon="flask" href="/examples/flask-rest">
+    Compare the generic-python approach with a Flask REST API using Repository and Mapper patterns.
+  </Card>
+</CardGroup>

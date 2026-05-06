@@ -1,0 +1,582 @@
+---
+title: 'How to Build and Register a Custom Claude Code Skill'
+description: 'Create a Claude Code skill: skill.md orchestrator, phase files, imperative vs reference section conventions, and registering skills in .claude/skills/.'
+---
+
+A Claude Code skill is a directory of Markdown and JSON files that teach Claude how to execute a multi-phase workflow. When you invoke a skill with `/skill-name`, Claude reads the orchestrator file (`skill.md`), follows its phase list, and delegates each phase to a specialized agent file. Skills integrate natively with Claude Dev Kit's time-tracking system and support per-stack customization through profile JSON files.
+
+The `implement-us` skill bundled with Claude Dev Kit is the canonical reference implementation — every design decision it uses is documented here.
+
+---
+
+## Skill directory structure
+
+Every skill lives under `.claude/skills/{skill-name}/` and follows this layout:
+
+<Tree>
+  <Tree.Folder name=".claude/skills/my-skill/" defaultOpen>
+    <Tree.File name="skill.md" />
+    <Tree.File name="config.json" />
+    <Tree.File name="artifacts.md" />
+    <Tree.File name="conventions.md" />
+    <Tree.Folder name="phases/" defaultOpen>
+      <Tree.File name="phase-0.md" />
+      <Tree.File name="phase-1.md" />
+      <Tree.File name="phase-2.md" />
+    </Tree.Folder>
+    <Tree.Folder name="customizations/">
+      <Tree.File name="profile-a.json" />
+      <Tree.File name="profile-b.json" />
+    </Tree.Folder>
+  </Tree.Folder>
+</Tree>
+
+| File / directory | Purpose |
+|-----------------|---------|
+| `skill.md` | Orchestrator — entry point Claude reads when the skill is invoked |
+| `config.json` | Base configuration: variables, phase definitions, quality gates |
+| `artifacts.md` | Canonical map of every file path the skill reads or writes |
+| `conventions.md` | Structural conventions for phase files (optional but recommended) |
+| `phases/` | One Markdown file per phase |
+| `customizations/` | Profile JSON files for different stacks (optional) |
+
+---
+
+## skill.md — the orchestrator
+
+`skill.md` is the single file Claude reads first. It must contain four sections:
+
+1. **Overview** — what the skill does and when to use it
+2. **Invocation syntax** — the `/command` name and its parameters
+3. **Phase list** — all phases with their agent file references
+4. **Failure recovery** — what to do when a phase fails
+
+### Minimal skill.md template
+
+```markdown
+# Skill: my-skill
+
+**Command:** `/my-skill`
+**Description:** One sentence describing the skill.
+
+---
+
+## Overview
+
+Explain what the skill automates, which problems it solves, and
+what the user gets at the end.
+
+---
+
+## Usage
+
+\```bash
+/my-skill ARG1 [--option]
+\```
+
+**Parameters:**
+- `ARG1`: Required argument (description)
+- `--option`: Optional flag (description)
+
+---
+
+## Phases
+
+This skill runs N phases sequentially:
+
+| Phase | Name | Approval required |
+|-------|------|-------------------|
+| 0 | Validation | No |
+| 1 | Main task | Yes |
+| 2 | Final report | No |
+
+### Phase 0: Validation
+**Agent:** `phases/phase-0.md`
+**Objective:** Verify prerequisites.
+**Approval:** Automatic
+
+### Phase 1: Main task
+**Agent:** `phases/phase-1.md`
+**Objective:** Execute the core work.
+**Approval:** Required
+
+### Phase 2: Final report
+**Agent:** `phases/phase-2.md`
+**Objective:** Summarize results.
+**Approval:** Automatic
+
+---
+
+## Failure recovery
+
+When a phase fails, follow this protocol in order:
+
+1. Read the full error output — do not assume the cause.
+2. Identify which phase contains the root cause.
+3. Fix the root cause in that phase, not a symptom elsewhere.
+4. Re-run the full phase — not just the failing step.
+5. Verify the exit checklist before advancing.
+6. If the phase fails a second time, report to the user and stop.
+
+---
+
+## Tracking
+
+Phase timing is recorded automatically via:
+
+\```bash
+python .claude/tracking/track.py start-phase N "Phase name"
+python .claude/tracking/track.py end-phase N
+\```
+```
+
+---
+
+## Phase files
+
+Each phase lives in `phases/phase-N.md` and contains three mandatory structural sections plus any number of content sections. Phase files follow the conventions defined in `conventions.md`.
+
+### Required sections in every phase file
+
+```markdown
+# Phase N: {Name}
+
+**Objective:** One-line description of what this phase produces.
+
+---
+
+## 🔴 Acción Requerida — Verify preconditions
+{Check that the previous phase's artifacts exist on disk}
+
+## 🔴 Acción Requerida — Start tracking
+{Tracking start command}
+
+---
+
+{Phase content: imperative and reference sections}
+
+---
+
+## ✅ Exit checklist
+{Verifiable conditions that must be true before advancing}
+
+## 🔴 Acción Requerida — Close tracking
+{Tracking end command}
+
+---
+
+**Next phase:** Phase N+1
+```
+
+---
+
+## The conventions.md system
+
+`conventions.md` defines how to write phase files so that Claude unambiguously distinguishes content it must execute from content it can read for context. The `implement-us` skill formalizes four section types:
+
+<AccordionGroup>
+  <Accordion title="🔴 Acción Requerida — Imperative sections">
+    Marked with `## 🔴 Acción Requerida — {brief description}`.
+
+    Claude **must** execute the content of this section before advancing. Rules:
+
+    - Uses imperative language: "Run", "Verify", "Generate"
+    - Specifies the exact command or action
+    - Any code block is preceded by a plain-language instruction
+    - Ends with a clear exit condition
+
+    **Example:**
+
+    ```markdown
+    ## 🔴 Acción Requerida — Start phase tracking
+
+    Before any other action in this phase, run:
+
+    \```bash
+    python .claude/tracking/track.py start-phase 7 "Quality Gates"
+    \```
+
+    Do not advance until the command completes successfully.
+    ```
+  </Accordion>
+
+  <Accordion title="📖 Referencia — Reference sections">
+    Marked with `## 📖 Referencia — {brief description}`.
+
+    Claude **may** read this section for context but is not required to act on it. Use for tables, examples, explanations, and alternatives.
+
+    **Example:**
+
+    ```markdown
+    ## 📖 Referencia — Quality thresholds by profile
+
+    The active thresholds are read from config.json. The table below is for reference only.
+
+    | Profile   | Pylint | Coverage |
+    |-----------|--------|----------|
+    | PyQt      | ≥ 8.0  | ≥ 90%    |
+    | FastAPI   | ≥ 8.5  | ≥ 95%    |
+    ```
+  </Accordion>
+
+  <Accordion title="✅ Exit checklist">
+    Appears at the end of every phase. Claude must confirm every item before advancing.
+
+    Each item must be verifiable with a concrete command (not subjective judgment):
+
+    ```markdown
+    ## ✅ Exit checklist
+
+    Before advancing to Phase 3, confirm:
+    - [ ] `docs/plans/{US_ID}-plan.md` exists on disk: `ls docs/plans/{US_ID}-plan.md`
+    - [ ] The plan was presented to the user
+    - [ ] The user explicitly approved the plan
+    - [ ] Phase 2 tracking is closed
+    ```
+  </Accordion>
+
+  <Accordion title="🚫 STOP — Explicit blocks">
+    Used when Claude cannot advance under any circumstances without meeting a specific condition. Unlike the exit checklist, this is an unconditional halt:
+
+    ```markdown
+    ## 🚫 STOP — Do not advance to Phase 3 until:
+
+    1. `docs/plans/{US_ID}-plan.md` exists on disk ✅
+    2. The user has explicitly responded with plan approval
+
+    Present the plan to the user and wait for their response before continuing.
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Why these conventions matter
+
+Without explicit section markers, Claude treats code blocks and instructions interchangeably — it may read a tracking command as documentation and skip it. The `🔴 Acción Requerida` header removes that ambiguity:
+
+<Tabs>
+  <Tab title="Before (ambiguous)">
+    ```python
+    # Claude may treat this as documentation and not run it
+    tracker.start_phase(7, "Quality Gates")
+    ```
+  </Tab>
+  <Tab title="After (imperative)">
+    ```markdown
+    ## 🔴 Acción Requerida — Start phase tracking
+
+    Run before any other action:
+    `python .claude/tracking/track.py start-phase 7 "Quality Gates"`
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## config.json for a skill
+
+The skill's `config.json` follows the same schema as `implement-us/config.json`. At minimum it needs:
+
+```json
+{
+  "metadata": {
+    "version": "1.0.0",
+    "skill_name": "my-skill",
+    "description": "What this skill does"
+  },
+  "phases": {
+    "0": {
+      "name": "Validation",
+      "duration_min": 2,
+      "duration_max": 5,
+      "approval_required": false,
+      "agent_file": "phases/phase-0.md"
+    },
+    "1": {
+      "name": "Main task",
+      "duration_min": 10,
+      "duration_max": 30,
+      "approval_required": true,
+      "agent_file": "phases/phase-1.md"
+    }
+  }
+}
+```
+
+Add `variables`, `quality_gates`, and other sections as needed. Any section you omit will not affect runtime — the skill simply won't use those features.
+
+---
+
+## Referencing templates and artifacts
+
+When a phase generates a file, reference the output path in `artifacts.md` so that later phases and users can reliably find it. The `implement-us` skill treats `artifacts.md` as the canonical map of every file the skill touches:
+
+```markdown
+# Artifact map
+
+## Phase 1 outputs
+- `tests/features/{US_ID}-{slug}.feature` — Gherkin scenario file
+
+## Phase 2 outputs
+- `docs/plans/{US_ID}-plan.md` — Implementation plan
+
+## Phase 9 outputs
+- `docs/reports/{US_ID}-report.md` — Final implementation report
+- `.claude/tracking/{US_ID}-tracking.json` — Time tracking data
+```
+
+Template files live in `.claude/templates/` and use `{VARIABLE_NAME}` placeholders:
+
+```markdown
+# Implementation Plan: {US_TITLE}
+
+**US ID:** {US_ID}
+**Architecture:** {ARCHITECTURE_PATTERN}
+**Component:** {COMPONENT_TYPE} at `{COMPONENT_PATH}`
+```
+
+---
+
+## Registering the skill
+
+For Claude Code to discover your skill, register it in `.claude/config.json`:
+
+```json
+{
+  "skills": {
+    "implement-us": {
+      "enabled": true,
+      "config_path": ".claude/skills/implement-us/config.json"
+    },
+    "my-skill": {
+      "enabled": true,
+      "config_path": ".claude/skills/my-skill/config.json"
+    }
+  }
+}
+```
+
+The key (`"my-skill"`) must match:
+- The directory name under `.claude/skills/`
+- The command name in `skill.md` (e.g., `/my-skill`)
+
+<Note>
+  Skills are discovered from the `.claude/skills/` directory relative to the project root where Claude Code is running. Installing a skill globally (outside a project) is not supported.
+</Note>
+
+---
+
+## Complete example: code-review skill
+
+The following is a complete minimal skill for automating code review on a pull request.
+
+### skill.md
+
+```markdown
+# Skill: code-review
+
+**Command:** `/code-review`
+**Description:** Run static analysis on the current branch and generate a review report.
+
+---
+
+## Usage
+
+\```bash
+/code-review
+/code-review --branch feature/my-feature
+\```
+
+---
+
+## Phases
+
+| Phase | Name | Approval |
+|-------|------|----------|
+| 0 | Fetch diff | No |
+| 1 | Static analysis | No |
+| 2 | Generate report | Yes |
+
+### Phase 0: Fetch diff
+**Agent:** `phases/phase-0.md`
+**Objective:** Get the list of changed files.
+
+### Phase 1: Static analysis
+**Agent:** `phases/phase-1.md`
+**Objective:** Run Pylint and radon on changed files.
+
+### Phase 2: Generate report
+**Agent:** `phases/phase-2.md`
+**Objective:** Write the review report and present it to the user.
+
+---
+
+## Failure recovery
+
+1. Identify the error from the full output.
+2. Fix the root cause.
+3. Re-run the failed phase.
+4. If Phase 0 fails (no diff), ensure the branch has commits.
+5. If Phase 1 fails, check that Pylint and radon are installed.
+```
+
+### phases/phase-0.md
+
+```markdown
+# Phase 0: Fetch diff
+
+**Objective:** Get the list of Python files changed on the current branch.
+
+---
+
+## 🔴 Acción Requerida — Fetch changed files
+
+Run:
+
+\```bash
+git diff main --name-only --diff-filter=ACM | grep '\.py$'
+\```
+
+Save the list to `.claude/review/changed-files.txt`.
+
+---
+
+## ✅ Exit checklist
+
+- [ ] `.claude/review/changed-files.txt` exists: `ls .claude/review/changed-files.txt`
+- [ ] The file is not empty (at least one changed Python file)
+
+---
+
+**Next phase:** Phase 1
+```
+
+### phases/phase-1.md
+
+```markdown
+# Phase 1: Static analysis
+
+**Objective:** Run Pylint and cyclomatic complexity analysis on changed files.
+
+---
+
+## 🔴 Acción Requerida — Verify phase 0 artifact
+
+\```bash
+ls .claude/review/changed-files.txt
+\```
+
+If the file does not exist, run Phase 0 first.
+
+## 🔴 Acción Requerida — Run Pylint
+
+\```bash
+pylint $(cat .claude/review/changed-files.txt | tr '\n' ' ')
+\```
+
+## 🔴 Acción Requerida — Run complexity analysis
+
+\```bash
+radon cc $(cat .claude/review/changed-files.txt | tr '\n' ' ') -s
+\```
+
+Save both outputs to `.claude/review/analysis-results.txt`.
+
+---
+
+## 📖 Referencia — Acceptable thresholds
+
+| Metric | Threshold |
+|--------|-----------|
+| Pylint score | ≥ 8.0 |
+| Cyclomatic complexity | ≤ 10 per function |
+
+---
+
+## ✅ Exit checklist
+
+- [ ] `.claude/review/analysis-results.txt` exists
+- [ ] Both tools ran without Python errors
+
+---
+
+**Next phase:** Phase 2
+```
+
+### config.json
+
+```json
+{
+  "metadata": {
+    "version": "1.0.0",
+    "skill_name": "code-review",
+    "description": "Static analysis and review report for changed Python files"
+  },
+  "phases": {
+    "0": {
+      "name": "Fetch diff",
+      "duration_min": 1,
+      "duration_max": 2,
+      "approval_required": false,
+      "agent_file": "phases/phase-0.md"
+    },
+    "1": {
+      "name": "Static analysis",
+      "duration_min": 3,
+      "duration_max": 10,
+      "approval_required": false,
+      "agent_file": "phases/phase-1.md"
+    },
+    "2": {
+      "name": "Generate report",
+      "duration_min": 2,
+      "duration_max": 5,
+      "approval_required": true,
+      "agent_file": "phases/phase-2.md"
+    }
+  }
+}
+```
+
+---
+
+## Tracking integration
+
+Add tracking commands to every phase file. The tracking system records actual elapsed time per phase, accumulates historical data, and generates variance reports in Phase 9 (or your equivalent final phase).
+
+```markdown
+## 🔴 Acción Requerida — Start tracking
+
+\```bash
+python .claude/tracking/track.py start-phase 1 "Static analysis"
+\```
+
+## 🔴 Acción Requerida — Close tracking
+
+\```bash
+python .claude/tracking/track.py end-phase 1
+\```
+```
+
+At the very end of the final phase, close the full tracking session:
+
+```bash
+python .claude/tracking/track.py end-tracking
+```
+
+<Tip>
+  `end-phase` closes only the current phase timer. `end-tracking` closes the entire skill session, calculates the total elapsed time, and writes the final record to `.claude/tracking/{session-id}-tracking.json`. Call `end-tracking` exactly once, after the last `end-phase`.
+</Tip>
+
+---
+
+## Best practices
+
+**Keep phases atomic.** Each phase should do one thing and produce one output artifact. If a phase feels too large, split it.
+
+**Write verifiable exit checklists.** Every checklist item must be checkable with a specific command — `ls`, `pytest`, a grep — not with subjective judgment like "the output looks correct".
+
+**Document the artifact map.** Every file the skill reads or writes should appear in `artifacts.md`. This prevents later phases from hard-coding paths that differ between profiles.
+
+**Prefer imperative sections over inline code comments.** A code block inside a `🔴 Acción Requerida` section will be executed; the same block inside a `📖 Referencia` section will be read but not run.
+
+**Test each phase in isolation.** You can invoke a specific phase file directly by asking Claude to follow it — you don't need to run the full skill. This makes iteration much faster.

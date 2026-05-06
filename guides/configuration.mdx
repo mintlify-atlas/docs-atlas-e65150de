@@ -1,0 +1,573 @@
+---
+title: 'Claude Dev Kit config.json — Complete Field Reference'
+description: 'Every config.json option explained: metadata, variables, phases, tracking, quality gates, test framework, BDD, documentation, and git settings.'
+---
+
+The `config.json` file installed at `.claude/skills/implement-us/config.json` is the central configuration for the `implement-us` skill. Every section controls a specific aspect of how the skill generates code, runs quality checks, and tracks time. Profile JSON files in the `customizations/` directory extend this base configuration — any field they define overrides the corresponding default.
+
+## File locations
+
+| File | Purpose |
+|------|---------|
+| `.claude/config.json` | Project-level config (profile selection, skill registration) |
+| `.claude/skills/implement-us/config.json` | Skill configuration (all options documented here) |
+| `.claude/skills/implement-us/customizations/{profile}.json` | Profile overrides |
+
+The project-level file selects which profile is active:
+
+```json
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "my-project",
+    "type": "python",
+    "root": "/Users/user/my-project"
+  },
+  "profile": "generic-python",
+  "tracking": {
+    "enabled": true,
+    "data_dir": ".claude/tracking"
+  },
+  "skills": {
+    "implement-us": {
+      "enabled": true,
+      "config_path": ".claude/skills/implement-us/config.json"
+    }
+  }
+}
+```
+
+---
+
+## metadata
+
+Descriptive information about the skill version. These fields are read-only identifiers — they do not affect runtime behavior.
+
+```json
+"metadata": {
+  "version": "2.0.0",
+  "skill_name": "implement-us",
+  "description": "Assisted User Story implementor following the architectural pattern configured for the project",
+  "author": "Claude Dev Kit",
+  "created": "2026-02-13",
+  "last_updated": "2026-02-27"
+}
+```
+
+<AccordionGroup>
+  <Accordion title="metadata fields">
+    <ParamField path="body.version" type="string">
+      Semantic version of the skill config schema.
+    </ParamField>
+    <ParamField path="body.skill_name" type="string">
+      Internal identifier. Must match the directory name under `skills/`.
+    </ParamField>
+    <ParamField path="body.description" type="string">
+      Human-readable description displayed in skill listings.
+    </ParamField>
+    <ParamField path="body.author" type="string">
+      Skill author or maintainer.
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## variables
+
+Global variables injected into every template at render time. Each entry defines a `default` value and an optional `available` list of valid values. Profile JSON files override these defaults for a specific stack.
+
+```json
+"variables": {
+  "architecture_pattern": {
+    "default": "generic",
+    "available": ["mvc", "mvt", "layered", "clean-architecture", "generic"]
+  },
+  "component_type": {
+    "default": "Component"
+  },
+  "component_path": {
+    "default": "src/{name}/"
+  },
+  "test_framework": {
+    "default": "pytest",
+    "available": ["pytest", "unittest", "pytest-bdd"]
+  },
+  "base_class": {
+    "default": "object"
+  },
+  "domain_context": {
+    "default": "application"
+  },
+  "project_root": {
+    "default": "."
+  },
+  "product": {
+    "default": "main"
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="variables fields">
+    <ParamField path="body.architecture_pattern" type="string" default="generic">
+      Architectural pattern used to generate component structure. Drives which files and layers the skill creates in Phase 3. Available values: `mvc`, `mvt`, `layered`, `clean-architecture`, `generic`.
+    </ParamField>
+    <ParamField path="body.component_type" type="string" default="Component">
+      Label for the type of component being implemented. Rendered in planning documents and file path templates. Examples by stack: `Panel` / `Dialog` (PyQt), `Endpoint` / `Service` / `Repository` (FastAPI), `Module` / `Class` (generic).
+    </ParamField>
+    <ParamField path="body.component_path" type="string" default="src/{name}/">
+      Base path template for component files. The `{name}` placeholder is replaced by the component name at runtime. Examples: `app/presentacion/{name}/` (PyQt), `app/api/{name}/` (FastAPI).
+    </ParamField>
+    <ParamField path="body.test_framework" type="string" default="pytest">
+      Testing framework for generated test files. Controls which imports, fixtures, and patterns are used. Available values: `pytest`, `unittest`, `pytest-bdd`.
+    </ParamField>
+    <ParamField path="body.base_class" type="string" default="object">
+      Base class for generated components. Examples: `QWidget` / `ModeloBase` (PyQt), `BaseModel` / `BaseService` (FastAPI).
+    </ParamField>
+    <ParamField path="body.domain_context" type="string" default="application">
+      Domain layer label used in generated documentation and plans. Examples: `presentacion` / `dominio` (PyQt), `api` / `domain` (FastAPI).
+    </ParamField>
+    <ParamField path="body.project_root" type="string" default=".">
+      Root directory of the project source, relative to the working directory. Examples: `app/` (PyQt, Flask), `src/` (FastAPI).
+    </ParamField>
+    <ParamField path="body.product" type="string" default="main">
+      Name of the product or main module. Used in git commit message templates and report headers.
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## phases
+
+Defines the 10 phases (0–9) of the skill. Each phase entry controls its display name, duration estimates, whether it requires explicit user approval, and which agent file drives its execution.
+
+```json
+"phases": {
+  "1": {
+    "name": "BDD Scenario Generation",
+    "description": "Create BDD scenarios in Gherkin format for the US",
+    "duration_min": 15,
+    "duration_max": 30,
+    "approval_required": true,
+    "agent_file": "phases/phase-1-bdd.md",
+    "output_template": "templates/bdd/scenario.feature"
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Phase definitions (0–9)">
+
+    | Phase | Name | Approval required | Duration (min–max) |
+    |-------|------|-------------------|--------------------|
+    | 0 | Context Validation | No | 5–10 min |
+    | 1 | BDD Scenario Generation | **Yes** | 15–30 min |
+    | 2 | Implementation Plan | **Yes** | 20–40 min |
+    | 3 | Implementation | No | 60–180 min |
+    | 4 | Unit Tests | No | 30–60 min |
+    | 5 | Integration Tests | No | 30–60 min |
+    | 6 | BDD Validation | No | 15–30 min |
+    | 7 | Quality Gates | No | 10–20 min |
+    | 8 | Documentation | **Yes** | 15–30 min |
+    | 9 | Final Report | No | 10–15 min |
+
+    <ParamField path="body.name" type="string">
+      Display name shown in tracking reports and phase headings.
+    </ParamField>
+    <ParamField path="body.description" type="string">
+      One-line description of the phase goal.
+    </ParamField>
+    <ParamField path="body.duration_min" type="number">
+      Minimum estimated duration in minutes (human effort reference, not agent execution time).
+    </ParamField>
+    <ParamField path="body.duration_max" type="number">
+      Maximum estimated duration in minutes.
+    </ParamField>
+    <ParamField path="body.approval_required" type="boolean" default="false">
+      When `true`, the agent presents output to the user and waits for explicit approval before advancing to the next phase. Phases 1, 2, and 8 require approval by default.
+    </ParamField>
+    <ParamField path="body.agent_file" type="string">
+      Relative path to the phase's Markdown agent file. The skill orchestrator reads this file to execute the phase.
+    </ParamField>
+    <ParamField path="body.output_template" type="string">
+      Optional. Path to the template used to generate the phase's primary output artifact.
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## tracking
+
+Controls the built-in time-tracking system that records actual elapsed time per phase to `.claude/tracking/`.
+
+```json
+"tracking": {
+  "enabled": true,
+  "auto_start": true,
+  "auto_pause_on_approval": true,
+  "storage_path": ".claude/tracking/",
+  "report_format": "json",
+  "variance_threshold_percent": 20,
+  "pause_reasons": [
+    "Waiting for user approval",
+    "Error investigation",
+    "Documentation lookup",
+    "Other (specify)"
+  ]
+}
+```
+
+<ParamField path="body.enabled" type="boolean" default="true">
+  Enables or disables the tracking system entirely. When `false`, no tracking files are written and all tracking commands become no-ops.
+</ParamField>
+
+<ParamField path="body.auto_start" type="boolean" default="true">
+  When `true`, each phase automatically starts a tracking session when its agent file runs the `start-phase` command.
+</ParamField>
+
+<ParamField path="body.auto_pause_on_approval" type="boolean" default="true">
+  Automatically pauses the phase timer when the skill reaches an approval checkpoint, so waiting time is not counted as active work time.
+</ParamField>
+
+<ParamField path="body.storage_path" type="string" default=".claude/tracking/">
+  Directory where per-US tracking JSON files are stored. Each US generates one file named `{US_ID}-tracking.json`.
+</ParamField>
+
+<ParamField path="body.variance_threshold_percent" type="number" default="20">
+  Percentage difference between estimated and actual time that triggers a variance warning in the final report. A value of `20` means warnings appear when actual time differs from estimated time by more than 20%.
+</ParamField>
+
+---
+
+## quality_gates
+
+Thresholds enforced by Phase 7. All four gates must pass before the skill advances to documentation. Each gate can be individually disabled by setting `"enabled": false`.
+
+```json
+"quality_gates": {
+  "pylint": {
+    "enabled": true,
+    "min_score": 8.0,
+    "max_score": 10.0,
+    "config_file": ".pylintrc",
+    "exclude_patterns": ["tests/*", "migrations/*", "__pycache__/*"]
+  },
+  "cyclomatic_complexity": {
+    "enabled": true,
+    "max_per_function": 10,
+    "tool": "radon",
+    "exclude_patterns": ["tests/*"]
+  },
+  "maintainability_index": {
+    "enabled": true,
+    "min_score": 20,
+    "max_score": 100,
+    "tool": "radon",
+    "exclude_patterns": ["tests/*"]
+  },
+  "coverage": {
+    "enabled": true,
+    "min_percent": 95.0,
+    "tool": "pytest-cov",
+    "exclude_patterns": ["tests/*", "__init__.py"],
+    "report_formats": ["term", "html", "xml"]
+  }
+}
+```
+
+### pylint
+
+<ParamField path="body.pylint.enabled" type="boolean" default="true">
+  Run Pylint during Phase 7.
+</ParamField>
+
+<ParamField path="body.pylint.min_score" type="number" default="8.0">
+  Minimum acceptable Pylint score (0.0–10.0). The base config requires 8.0; profiles can raise this (e.g., `fastapi-rest` requires 8.5).
+</ParamField>
+
+<ParamField path="body.pylint.config_file" type="string" default=".pylintrc">
+  Path to the `.pylintrc` configuration file. Relative to the project root.
+</ParamField>
+
+<ParamField path="body.pylint.exclude_patterns" type="string[]" default='["tests/*", "migrations/*", "__pycache__/*"]'>
+  Glob patterns for files and directories that Pylint skips.
+</ParamField>
+
+### cyclomatic_complexity
+
+<ParamField path="body.cyclomatic_complexity.enabled" type="boolean" default="true">
+  Run cyclomatic complexity analysis during Phase 7.
+</ParamField>
+
+<ParamField path="body.cyclomatic_complexity.max_per_function" type="number" default="10">
+  Maximum cyclomatic complexity allowed per function. The `pyqt-mvc` profile raises this to `12` to accommodate UI event handlers.
+</ParamField>
+
+<ParamField path="body.cyclomatic_complexity.tool" type="string" default="radon">
+  Tool used to compute complexity. `radon` is the only supported value in the base config; the `hexagonal-ddd-bc` profile uses `codeguard` (which wraps radon).
+</ParamField>
+
+### maintainability_index
+
+<ParamField path="body.maintainability_index.enabled" type="boolean" default="true">
+  Run maintainability index analysis during Phase 7.
+</ParamField>
+
+<ParamField path="body.maintainability_index.min_score" type="number" default="20">
+  Minimum acceptable Maintainability Index (0–100, computed by radon). The `fastapi-rest` profile raises this to `25`.
+</ParamField>
+
+<ParamField path="body.maintainability_index.tool" type="string" default="radon">
+  Tool used to compute the index. Must be `radon`.
+</ParamField>
+
+### coverage
+
+<ParamField path="body.coverage.enabled" type="boolean" default="true">
+  Run coverage measurement during Phase 7.
+</ParamField>
+
+<ParamField path="body.coverage.min_percent" type="number" default="95.0">
+  Minimum line coverage required (0–100). The `pyqt-mvc` profile uses 90.0 because UI code is harder to cover fully.
+</ParamField>
+
+<ParamField path="body.coverage.tool" type="string" default="pytest-cov">
+  Coverage tool. Must be `pytest-cov`.
+</ParamField>
+
+<ParamField path="body.coverage.exclude_patterns" type="string[]" default='["tests/*", "__init__.py"]'>
+  Files and directories excluded from coverage measurement.
+</ParamField>
+
+<ParamField path="body.coverage.report_formats" type="string[]" default='["term", "html", "xml"]'>
+  Output formats for the coverage report. `term` prints a summary to the terminal; `html` generates a browsable report in `htmlcov/`; `xml` generates `coverage.xml` for CI integration.
+</ParamField>
+
+<Tip>
+  Profile overrides are merged with—not replacing—the base `quality_gates` block. You only need to specify the fields you want to change in your profile JSON.
+</Tip>
+
+---
+
+## test_framework_config
+
+Configures pytest discovery, plugins, fixture paths, and coverage scope. Profiles extend this to add framework-specific plugins (e.g., `pytest-asyncio` for FastAPI, `pytest-qt` for PyQt).
+
+```json
+"test_framework_config": {
+  "runner": "pytest",
+  "plugins": [],
+  "fixtures_path": "tests/conftest.py",
+  "features_path": "tests/features/",
+  "steps_path": "tests/step_defs/",
+  "test_path": "tests/",
+  "unit_test_path": "tests/unit/",
+  "integration_test_path": "tests/integration/",
+  "markers": {
+    "unit": "Unit tests",
+    "integration": "Integration tests",
+    "bdd": "BDD tests (pytest-bdd)",
+    "slow": "Slow tests (>1s)"
+  },
+  "coverage_config": {
+    "source": ["src"],
+    "omit": ["tests/*", "*/migrations/*"]
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="test_framework_config fields">
+    <ParamField path="body.runner" type="string" default="pytest">
+      Test runner. Currently only `pytest` is supported.
+    </ParamField>
+    <ParamField path="body.plugins" type="string[]" default="[]">
+      Additional pytest plugins to install and activate. Profiles add stack-specific plugins here (e.g., `["pytest-asyncio", "httpx", "pytest-cov", "pytest-bdd"]` for FastAPI).
+    </ParamField>
+    <ParamField path="body.fixtures_path" type="string" default="tests/conftest.py">
+      Path to the shared conftest.py file that defines reusable fixtures.
+    </ParamField>
+    <ParamField path="body.features_path" type="string" default="tests/features/">
+      Directory for Gherkin `.feature` files generated in Phase 1.
+    </ParamField>
+    <ParamField path="body.steps_path" type="string" default="tests/step_defs/">
+      Directory for BDD step definition files generated in Phase 6.
+    </ParamField>
+    <ParamField path="body.unit_test_path" type="string" default="tests/unit/">
+      Directory for unit test files generated in Phase 4.
+    </ParamField>
+    <ParamField path="body.integration_test_path" type="string" default="tests/integration/">
+      Directory for integration test files generated in Phase 5.
+    </ParamField>
+    <ParamField path="body.coverage_config.source" type="string[]" default='["src"]'>
+      Source directories included in coverage measurement.
+    </ParamField>
+    <ParamField path="body.coverage_config.omit" type="string[]" default='["tests/*", "*/migrations/*"]'>
+      Files and directories omitted from coverage data.
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## component_structure
+
+Defines the files and paths that Phase 3 generates for each component. The base config provides a minimal generic structure; profiles replace this with stack-specific layouts.
+
+```json
+"component_structure": {
+  "default": {
+    "files": ["__init__.py", "main.py"],
+    "test_files": ["test_{component_name}.py"],
+    "base_path": "src/{component_name}/",
+    "test_path": "tests/test_{component_name}/"
+  }
+}
+```
+
+<ParamField path="body.default.files" type="string[]">
+  Source files to generate for the component. Placeholders like `{component_name}` are resolved at runtime.
+</ParamField>
+
+<ParamField path="body.default.test_files" type="string[]">
+  Test files to generate. Profiles expand this to cover multiple test types (e.g., `test_{component}_modelo.py`, `test_{component}_vista.py`, `test_{component}_controlador.py` for PyQt).
+</ParamField>
+
+<ParamField path="body.default.base_path" type="string">
+  Base source directory for the component.
+</ParamField>
+
+<ParamField path="body.default.test_path" type="string">
+  Base test directory for the component.
+</ParamField>
+
+<Note>
+  Profiles such as `fastapi-rest` and `pyqt-mvc` replace `default` with named structures (e.g., `api_feature`, `mvc_panel`) that include per-layer file definitions with class names, base classes, and responsibility lists. See [Customization](/guides/customization) for details.
+</Note>
+
+---
+
+## bdd_config
+
+Controls BDD scenario generation in Phase 1 and step validation in Phase 6.
+
+```json
+"bdd_config": {
+  "runner": "pytest-bdd",
+  "feature_template": "templates/bdd/scenario.feature",
+  "steps_template": "templates/bdd/steps.py",
+  "tag_prefix": "@US-",
+  "language": "es"
+}
+```
+
+<ParamField path="body.runner" type="string" default="pytest-bdd">
+  BDD test runner. Only `pytest-bdd` is supported.
+</ParamField>
+
+<ParamField path="body.feature_template" type="string" default="templates/bdd/scenario.feature">
+  Template file used to generate `.feature` files in Phase 1.
+</ParamField>
+
+<ParamField path="body.steps_template" type="string" default="templates/bdd/steps.py">
+  Template file used to generate step definition files in Phase 6.
+</ParamField>
+
+<ParamField path="body.tag_prefix" type="string" default="@US-">
+  Prefix for Gherkin scenario tags. A US with ID `US-042` is tagged `@US-042`.
+</ParamField>
+
+<ParamField path="body.language" type="string" default="es">
+  Language for Gherkin keywords in feature files. Note: `pytest-bdd` 8.x requires English keywords (`Given`/`When`/`Then`) regardless of this setting — the `hexagonal-ddd-bc` profile documents this constraint explicitly.
+</ParamField>
+
+---
+
+## documentation_config
+
+Specifies where generated documentation artifacts are written.
+
+```json
+"documentation_config": {
+  "plan_path": "docs/plans/",
+  "report_path": "docs/reports/",
+  "adr_path": "docs/architecture/decisions/",
+  "format": "markdown",
+  "include_diagrams": false
+}
+```
+
+<ParamField path="body.plan_path" type="string" default="docs/plans/">
+  Directory for implementation plan files generated in Phase 2 (`{US_ID}-plan.md`).
+</ParamField>
+
+<ParamField path="body.report_path" type="string" default="docs/reports/">
+  Directory for final implementation reports generated in Phase 9 (`{US_ID}-report.md`).
+</ParamField>
+
+<ParamField path="body.adr_path" type="string" default="docs/architecture/decisions/">
+  Directory for Architecture Decision Records updated in Phase 8.
+</ParamField>
+
+<ParamField path="body.format" type="string" default="markdown">
+  Output format for all generated documentation. Only `markdown` is supported.
+</ParamField>
+
+<ParamField path="body.include_diagrams" type="boolean" default="false">
+  When `true`, Phase 8 generates Mermaid or PlantUML diagrams. The `fastapi-rest` and `pyqt-mvc` profiles set this to `true`.
+</ParamField>
+
+---
+
+## git_config
+
+Controls git integration. All automation is disabled by default to keep the skill non-destructive.
+
+```json
+"git_config": {
+  "auto_commit": false,
+  "commit_message_template": "feat({product}): {us_id} - {us_title}",
+  "branch_naming": "feature/{us_id}-{us_slug}",
+  "auto_push": false
+}
+```
+
+<ParamField path="body.auto_commit" type="boolean" default="false">
+  When `true`, the skill automatically commits after Phase 9 completes. Disabled by default.
+</ParamField>
+
+<ParamField path="body.commit_message_template" type="string" default="feat({product}): {us_id} - {us_title}">
+  Commit message template. Supports `{product}`, `{us_id}`, and `{us_title}` placeholders.
+</ParamField>
+
+<ParamField path="body.branch_naming" type="string" default="feature/{us_id}-{us_slug}">
+  Branch naming convention when the skill creates a branch. `{us_slug}` is the US title converted to kebab-case.
+</ParamField>
+
+<ParamField path="body.auto_push" type="boolean" default="false">
+  When `true`, automatically pushes the commit to the remote. Disabled by default.
+</ParamField>
+
+<Warning>
+  Enabling `auto_commit` or `auto_push` means the skill will write to your git history without additional confirmation. Enable these only in workflows where every generated commit is acceptable.
+</Warning>
+
+---
+
+## Quality gate thresholds by profile
+
+The table below summarizes how each bundled profile overrides the base quality gate defaults:
+
+| Profile | Pylint min | CC max/fn | MI min | Coverage min |
+|---------|-----------|-----------|--------|-------------|
+| `generic-python` | 8.0 | 10 | 20 | 95% |
+| `fastapi-rest` | **8.5** | 10 | **25** | 95% |
+| `flask-rest` | 8.0 | 10 | 20 | 95% |
+| `flask-webapp` | 8.0 | 10 | 20 | 90% |
+| `pyqt-mvc` | 8.0 | **12** | 20 | **90%** |
+| `hexagonal-ddd-bc` | 8.0 | 10 | — | **90%** (domain+app only) |
+
+Values in bold differ from the base config defaults.

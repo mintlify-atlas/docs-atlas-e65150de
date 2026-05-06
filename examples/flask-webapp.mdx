@@ -1,0 +1,308 @@
+---
+title: "Flask WebApp example: Blog with Jinja2 SSR and BFF pattern"
+description: "Build a fullstack blog application with Flask, Jinja2 server-side rendering, Flask-WTF forms, 43 tests, and 99% coverage using the flask-webapp profile."
+---
+
+This example shows how Claude Dev Kit's `/implement-us` skill builds a **fullstack blog application** using the `flask-webapp` profile. The profile follows a Backend for Frontend (BFF) pattern with Jinja2 server-side rendering, Flask-WTF forms with CSRF protection, and five Jinja2 templates. The framework generates 43 tests covering route logic, form validation, and BDD scenarios — reaching 99% coverage with a Pylint score of 9.84/10.
+
+## Project overview
+
+| Property | Value |
+|---|---|
+| Stack | Flask 3.x + Jinja2 + Flask-WTF |
+| Architecture | BFF + Server-Side Rendering (SSR) |
+| Test framework | pytest + Flask test client |
+| Minimum coverage | 90% |
+| Tests generated | 43 (passing out of 48 generated) |
+| Actual coverage | 99% |
+| Pylint score | 9.84/10 |
+| Profile | `flask-webapp` |
+
+## User story
+
+```markdown
+# US-056: Blog Application
+
+As a web user
+I want a blog application with a graphical interface
+So I can create, read, edit, and delete posts
+```
+
+**Acceptance criteria:**
+
+- View a list of existing posts
+- View the full detail of a post
+- Create a new post with a web form
+- Edit an existing post with a pre-populated form
+- Delete a post with a confirmation page
+- Server-side form validation
+- Success and error feedback messages (flash messages)
+- Responsive interface
+
+## Implementation walkthrough
+
+<Steps>
+  <Step title="Install the flask-webapp profile">
+    Install with the `flask-webapp` profile. This configures templates for BFF architecture, the Application Factory pattern, Flask-WTF form handling, and Jinja2 template generation.
+
+    ```bash
+    python ~/.claude-dev-kit/install/installer.py --profile flask-webapp --yes
+    ```
+
+    The profile sets coverage minimum at 90% (not 95%) because JavaScript frontend code is excluded from Python coverage.
+  </Step>
+
+  <Step title="Create the user story file">
+    ```bash
+    cat > historias-usuario/US-056.md << 'EOF'
+    # US-056: Blog Application
+
+    As a web user
+    I want a blog application with a graphical interface
+    So I can create, read, edit, and delete posts
+
+    ## Acceptance Criteria
+
+    - View list of posts with title, author, and excerpt
+    - View full detail of a post
+    - Create new post with web form (title, content, author)
+    - Edit existing post with pre-populated form
+    - Delete post with confirmation page
+    - Form validation (required fields, minimum length)
+    - Flash messages for success/error
+    - Responsive CSS interface
+
+    ## Technical Notes
+
+    - Framework: Flask (WebApp fullstack)
+    - Architecture: Application Factory + Blueprint
+    - Forms: Flask-WTF + WTForms
+    - Templates: Jinja2
+    - Database: In-memory (dict) for demo
+    - Tests: pytest + pytest-bdd
+    - CSRF: Protection enabled
+    EOF
+    ```
+  </Step>
+
+  <Step title="Run the skill">
+    ```bash
+    /implement-us US-056
+    ```
+
+    The skill generates BDD scenarios first, then a detailed implementation plan covering all 12 components (Model, Database, Form, Routes, 5 Templates, CSS, Application Factory, entry point) before writing code.
+  </Step>
+
+  <Step title="Review BDD scenarios (Phase 1)">
+    Ten Gherkin scenarios are generated, covering the complete user journey through the blog interface.
+
+    ```gherkin
+    Feature: Blog Application
+
+      Background:
+        Given la aplicación está ejecutándose
+        And la base de datos está vacía
+
+      Scenario: Crear nuevo post exitosamente
+        When visito la página "Crear Post"
+        And lleno el formulario con:
+          | campo     | valor                          |
+          | Título    | Mi nuevo post                  |
+          | Contenido | Este es el contenido del post  |
+          | Autor     | Carlos                         |
+        And presiono el botón "Guardar"
+        Then debo ver el mensaje "Post creado exitosamente"
+        And debo ser redirigido al detalle del post
+
+      Scenario: Validar formulario - contenido mínimo
+        When visito la página "Crear Post"
+        And lleno el formulario con contenido de menos de 10 caracteres
+        And presiono el botón "Guardar"
+        Then debo ver el mensaje de error
+          "El contenido debe tener al menos 10 caracteres"
+    ```
+  </Step>
+
+  <Step title="Implement all components (Phase 3)">
+    The skill generates components in dependency order:
+
+    1. **`app/models/post.py`** — `Post` dataclass with `to_dict()` and `__str__()`
+    2. **`app/database.py`** — `PostDatabase` singleton with pagination support
+    3. **`app/forms/post_form.py`** — `PostForm(FlaskForm)` with `DataRequired()` and `Length(min=10)` validators and Spanish error messages
+    4. **`app/routes/blog.py`** — `blog_bp` Blueprint with five routes: `index`, `post_detail`, `post_create`, `post_edit`, `post_delete`
+    5. **`app/__init__.py`** — `create_app()` with `nl2br` Jinja2 custom filter and CSRF configuration
+    6. **Five Jinja2 templates** — `base.html`, `index.html`, `post_detail.html`, `post_form.html`, `confirm_delete.html`
+    7. **`app/static/style.css`** — Responsive CSS with CSS variables, card grid, and flash message styles
+  </Step>
+
+  <Step title="Run tests and check coverage (Phases 4–7)">
+    ```bash
+    pytest tests/ -v --cov=app --cov-report=term-missing
+    ```
+
+    Expected result: **43 passed, 99% coverage**.
+
+    Tests are organized across four files: `test_post_model.py` (unit), `test_forms.py` (unit), `test_routes.py` (integration), and `test_forms_integration.py` (integration).
+  </Step>
+</Steps>
+
+## Command used
+
+```bash
+/implement-us US-056
+```
+
+<Note>
+The `flask-webapp` profile generates Jinja2 templates and CSS in addition to Python code. Python test coverage applies only to the backend (routes, forms, database, application factory). JavaScript files in `static/js/` are not included in pytest coverage.
+</Note>
+
+## Generated file structure
+
+```
+flask-blog-app/
+├── app/
+│   ├── __init__.py              # Application Factory
+│   ├── database.py              # PostDatabase singleton
+│   ├── models/
+│   │   └── post.py              # Post dataclass
+│   ├── forms/
+│   │   └── post_form.py         # PostForm (Flask-WTF)
+│   ├── routes/
+│   │   └── blog.py              # Blueprint (5 routes)
+│   ├── templates/
+│   │   ├── base.html            # Base layout with flash messages
+│   │   ├── index.html           # Post list with pagination
+│   │   ├── post_detail.html     # Full post view
+│   │   ├── post_form.html       # Create/edit form
+│   │   └── confirm_delete.html  # Delete confirmation
+│   └── static/
+│       └── style.css            # Responsive CSS
+├── tests/
+│   ├── conftest.py              # App fixture + db reset
+│   ├── test_post_model.py       # 7 unit tests
+│   ├── test_forms.py            # 8 unit tests
+│   ├── test_routes.py           # 14 integration tests
+│   └── test_forms_integration.py # 9 integration tests
+├── features/
+│   ├── blog.feature             # 10 BDD scenarios (107 lines)
+│   └── steps/blog_steps.py
+├── main.py
+├── requirements.txt
+└── pytest.ini
+```
+
+## Test results
+
+```
+tests/test_post_model.py ......  [ 14%]
+tests/test_forms.py ........     [ 32%]
+tests/test_routes.py ..............  [ 65%]
+tests/test_forms_integration.py .........  [ 86%]
+(5 BDD tests passing)
+
+============================== 43 passed ==============================
+```
+
+## Quality gate results
+
+| Metric | Result | Threshold | Status |
+|---|---|---|---|
+| Tests passing | 43/48 (89%) | — | Note |
+| Coverage | 99% | ≥ 90% | Pass |
+| Pylint score | 9.84/10 | ≥ 8.0 | Pass |
+| Cyclomatic complexity | A | < 10 | Pass |
+| Maintainability index | A (all modules) | ≥ 20 | Pass |
+
+<Note>
+43 out of 48 generated tests pass. The five that do not pass are BDD scenarios that require browser-level HTML navigation (`visito la página "Crear Post"`). These use step definitions that simulate clicks rather than HTTP client calls, and require additional fixture setup to run with Flask's test client. The remaining 43 tests — all unit and integration tests — pass at 100%.
+</Note>
+
+## Key code snippet
+
+The `PostForm` uses Flask-WTF validators to enforce content requirements. Spanish error messages are set directly on each validator:
+
+```python
+# app/forms/post_form.py
+from flask_wtf import FlaskForm
+from wtforms import StringField, TextAreaField, SubmitField
+from wtforms.validators import DataRequired, Length
+
+
+class PostForm(FlaskForm):
+    """Form for creating and editing blog posts."""
+
+    title = StringField(
+        'Título',
+        validators=[
+            DataRequired(message='El título es requerido')
+        ],
+        render_kw={'placeholder': 'Ingrese el título del post'}
+    )
+
+    content = TextAreaField(
+        'Contenido',
+        validators=[
+            DataRequired(message='El contenido es requerido'),
+            Length(min=10, message='El contenido debe tener al menos 10 caracteres')
+        ],
+        render_kw={'placeholder': 'Ingrese el contenido del post', 'rows': 10}
+    )
+
+    author = StringField(
+        'Autor',
+        validators=[
+            DataRequired(message='El autor es requerido')
+        ]
+    )
+
+    submit = SubmitField('Guardar')
+```
+
+The route uses `form.validate_on_submit()` to handle both GET (show empty form) and POST (validate and redirect) in a single function:
+
+```python
+# app/routes/blog.py
+@blog_bp.route('/post/new', methods=['GET', 'POST'])
+def post_create():
+    """Create a new blog post."""
+    form = PostForm()
+
+    if form.validate_on_submit():
+        post = Post(
+            title=form.title.data,
+            content=form.content.data,
+            author=form.author.data
+        )
+        created_post = db.create(post)
+        flash('Post creado exitosamente', 'success')
+        return redirect(url_for('blog.post_detail', post_id=created_post.id))
+
+    return render_template('post_form.html', form=form, mode='create')
+```
+
+The `base.html` template renders flash messages from all categories:
+
+```html
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+```
+
+<Tip>
+Flask-WTF automatically adds CSRF tokens to all forms when `SECRET_KEY` is configured. The `form.hidden_tag()` call in `post_form.html` renders the hidden CSRF input. For testing, set `WTF_CSRF_ENABLED = False` in the test configuration to avoid CSRF token errors.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="Flask REST API example" icon="server" href="/examples/flask-rest">
+    See Flask used as a JSON REST API with the Repository and Mapper patterns and 38 tests.
+  </Card>
+  <Card title="PyQt6 MVC example" icon="desktop" href="/examples/pyqt-mvc">
+    Explore a desktop calculator with MVC architecture, pytest-qt, and immutable model dataclasses.
+  </Card>
+</CardGroup>

@@ -1,0 +1,301 @@
+---
+title: "Quality gates: metrics, thresholds, and failure recovery"
+description: "How Phase 7 validates Pylint score, cyclomatic complexity, maintainability index, and coverage — with per-profile thresholds and a failure protocol."
+---
+
+Phase 7 runs four objective quality metrics against the code produced in Phase 3 before the skill advances to documentation and the final report. All four metrics must reach their thresholds — thresholds are read from the active profile's `config.json`, never hardcoded in the phase file.
+
+## The 4 quality metrics
+
+### Pylint score
+
+Pylint performs static analysis on the production code, checking PEP 8 naming conventions, unused imports and variables, unreachable code, missing documentation, and potential logic errors.
+
+**Tool:** `pylint`
+
+**Command:**
+
+```bash
+pylint {COMPONENT_PATH}/ --output-format=json > quality/reports/{US_ID}-pylint.json
+pylint {COMPONENT_PATH}/ --output-format=text
+```
+
+**Threshold:** Score ≥ `quality_gates.pylint.min_score` from the active profile (default: `8.0`)
+
+**Example output:**
+
+```
+user_profile/modelo.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+
+-----------------------------------
+Your code has been rated at 9.2/10
+```
+
+---
+
+### Cyclomatic complexity (CC)
+
+Cyclomatic complexity measures the number of independent execution paths in a function. The pass criterion is **per function**, not the average — a single function exceeding the threshold rejects the phase even if the overall average is low.
+
+**Tool:** `radon cc`
+
+**Commands:**
+
+```bash
+# Per-function CC (approval criterion)
+radon cc {COMPONENT_PATH}/ -s
+
+# Per-function CC saved as JSON
+radon cc {COMPONENT_PATH}/ -a -s -j > quality/reports/{US_ID}-cc.json
+```
+
+**Threshold:** Each function ≤ `quality_gates.cyclomatic_complexity.max_per_function` from the active profile (default: `10`)
+
+**Interpretation:**
+
+| CC range | Classification |
+|---|---|
+| 1–5 | Simple, easy to test |
+| 6–10 | Moderately complex, acceptable |
+| 11–20 | Complex, consider refactoring |
+| 21+ | Very complex, refactor urgently |
+
+**Example output:**
+
+```
+user_profile/modelo.py
+    M 12:0 UserProfileModelo.__post_init__ - A (2)
+    M 25:0 UserProfileModelo.validate - A (3)
+
+Average complexity: A (2.5)
+```
+
+---
+
+### Maintainability index (MI)
+
+The maintainability index is a composite score (0–100) derived from lines of code per function, cyclomatic complexity, and Halstead volume (operator/operand counts). The pass criterion is the **average** across all files.
+
+**Tool:** `radon mi`
+
+**Command:**
+
+```bash
+radon mi {COMPONENT_PATH}/ -s -j > quality/reports/{US_ID}-mi.json
+```
+
+**Threshold:** Average MI > `quality_gates.maintainability_index.min_score` from the active profile (default: `20`)
+
+**Interpretation:**
+
+| MI range | Classification |
+|---|---|
+| 0–10 | Very hard to maintain |
+| 10–20 | Hard to maintain |
+| 20–50 | Moderately maintainable |
+| 50+ | Highly maintainable |
+
+**Example output:**
+
+```
+user_profile/modelo.py - A (78.5)
+user_profile/vista.py - B (65.2)
+
+Average MI: A (71.85)
+```
+
+---
+
+### Test coverage
+
+Coverage measures the percentage of production code lines executed by the test suite (unit + integration + BDD).
+
+**Tool:** `pytest-cov`
+
+**Command:**
+
+```bash
+pytest tests/ \
+  --cov={COMPONENT_PATH} \
+  --cov-report=term \
+  --cov-report=json:quality/reports/{US_ID}-coverage.json \
+  --cov-report=html:quality/reports/{US_ID}-coverage-html
+```
+
+**Threshold:** Coverage ≥ `quality_gates.coverage.min_percent` from the active profile (default: `95.0`)
+
+**What to cover:** All public methods, conditional branches, and error/exception handling. Boilerplate (imports, constants) and abstract methods are excluded.
+
+**Example output:**
+
+```
+Name                           Stmts   Miss  Cover
+--------------------------------------------------
+user_profile/modelo.py            25      1    96%
+user_profile/vista.py             42      3    93%
+user_profile/controlador.py       18      0   100%
+--------------------------------------------------
+TOTAL                             85      4    95%
+```
+
+---
+
+## Default thresholds
+
+The default thresholds from `config.json` (generic profile) are:
+
+```json
+{
+  "quality_gates": {
+    "pylint": {
+      "enabled": true,
+      "min_score": 8.0,
+      "max_score": 10.0,
+      "config_file": ".pylintrc",
+      "exclude_patterns": ["tests/*", "migrations/*", "__pycache__/*"]
+    },
+    "cyclomatic_complexity": {
+      "enabled": true,
+      "max_per_function": 10,
+      "tool": "radon",
+      "exclude_patterns": ["tests/*"]
+    },
+    "maintainability_index": {
+      "enabled": true,
+      "min_score": 20,
+      "max_score": 100,
+      "tool": "radon",
+      "exclude_patterns": ["tests/*"]
+    },
+    "coverage": {
+      "enabled": true,
+      "min_percent": 95.0,
+      "tool": "pytest-cov",
+      "exclude_patterns": ["tests/*", "__init__.py"],
+      "report_formats": ["term", "html", "xml"]
+    }
+  }
+}
+```
+
+---
+
+## Thresholds by profile
+
+Each profile customizes thresholds to match the realities of its stack. Thresholds are defined in `.claude/skills/implement-us/customizations/{profile}.json` and override the base `config.json`.
+
+| Profile | Pylint min | CC max/fn | MI min | Coverage min |
+|---|---|---|---|---|
+| PyQt MVC | 8.0 | 12 | 20 | 90% |
+| FastAPI REST | 8.5 | 10 | 25 | 95% |
+| Flask REST | 8.0 | 10 | 25 | 95% |
+| Flask Webapp | 8.0 | 10 | 20 | 90% |
+| Generic Python | 8.0 | 10 | 20 | 95% |
+
+**Rationale for key variations:**
+
+- **PyQt MVC — CC 12:** Controllers can have more complex coordination logic between model and view
+- **PyQt MVC — Coverage 90%:** UI code requires complex Qt mocks; 90% is the practical ceiling
+- **FastAPI REST — Pylint 8.5:** API code is a public interface, requiring stricter style
+- **FastAPI REST / Flask REST — MI 25:** Backend services must be highly maintainable long-term
+- **Flask Webapp — Coverage 90%:** Coverage scope is Python backend only (routes, api_client, forms); frontend JavaScript is not measured by pytest
+
+To read the thresholds for the currently active profile:
+
+```bash
+cat .claude/skills/implement-us/config.json | jq '.quality_gates'
+```
+
+---
+
+## Quality report output
+
+Phase 7 generates a consolidated JSON report at `quality/reports/{US_ID}-quality.json`. The state field is `APROBADO` if all metrics pass, `RECHAZADO` if any fail.
+
+```json
+{
+  "us_id": "{US_ID}",
+  "fecha": "{FECHA_ISO}",
+  "componente": "{COMPONENT_PATH}",
+  "metricas": {
+    "pylint": 0.0,
+    "cc_promedio": 0.0,
+    "cc_max_por_funcion": 0,
+    "mi_promedio": 0.0,
+    "coverage": 0.0
+  },
+  "umbrales": {
+    "pylint_min": 0.0,
+    "cc_max": 0,
+    "mi_min": 0.0,
+    "coverage_min": 0.0
+  },
+  "estado": "APROBADO",
+  "observaciones": []
+}
+```
+
+The `umbrales` values are populated by reading `config.json` before generating the file — they are not derived from memory or hardcoded defaults.
+
+Phase 9 reads `quality/reports/{US_ID}-quality.json` as its source of truth for the quality metrics section of the final report.
+
+---
+
+## What happens when a gate fails
+
+When a metric does not reach its threshold, the skill applies the following protocol per metric:
+
+<Warning>
+The skill re-executes **all** quality gate checks after each correction. Do not advance to Phase 8 until `quality/reports/{US_ID}-quality.json` has state `APROBADO` (or a documented exception in `observaciones`).
+</Warning>
+
+| Failing metric | Recovery action |
+|---|---|
+| Pylint < threshold | Review reported issues in the code (Phase 3), fix them, re-run Pylint |
+| CC > threshold | Identify functions with high CC using `radon cc {COMPONENT_PATH}/ -s --min C`, refactor in Phase 3, return to Phase 7 |
+| MI < threshold | Reduce function size (target 20–30 lines max), reduce CC, improve docstrings — fix in Phase 3 |
+| Coverage < threshold | Identify uncovered lines with `pytest --cov={COMPONENT_PATH} --cov-report=term-missing`, add tests in Phase 4, return to Phase 7 |
+
+After two autonomous correction attempts without success, the skill stops and reports the situation to you. It will not continue past Phase 7 with a `RECHAZADO` state unless an exception is explicitly documented.
+
+**Documenting an exception (when a threshold cannot be reached):**
+
+If a metric cannot reach its threshold for justified reasons (legacy code in gradual refactoring, one-off scripts, prototypes), document the justification in `observaciones` and inform the user before continuing:
+
+```json
+{
+  "observaciones": [
+    "Coverage 92%: Legacy migration code, scheduled for refactoring in next sprint",
+    "Pylint 7.8: False positives in auto-generated methods"
+  ]
+}
+```
+
+Exceptions must be temporary and justified — not used to bypass quality standards silently.
+
+---
+
+## How to configure custom thresholds
+
+To set custom thresholds for your project, edit the active profile JSON file at `.claude/skills/implement-us/customizations/{profile}.json`. Override any of the four `quality_gates` keys:
+
+```json
+{
+  "quality_gates": {
+    "pylint": {
+      "min_score": 8.5
+    },
+    "cyclomatic_complexity": {
+      "max_per_function": 8
+    },
+    "maintainability_index": {
+      "min_score": 30
+    },
+    "coverage": {
+      "min_percent": 98.0
+    }
+  }
+}
+```
+
+Profile keys take precedence over the base `config.json` values. Phase 0 reads the merged configuration and records the resolved thresholds in `docs/plans/{US_ID}-context.md` for the run.

@@ -1,81 +1,261 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
-icon: 'rocket'
+title: "Quickstart: Implement a User Story with Claude Dev Kit"
+description: "Clone the repo, run the installer, pick a stack profile, create a user story file, and run /implement-us US-001 — all in under 15 minutes."
 ---
 
-## Get started in three steps
+This guide walks you through the complete first-run experience: cloning Claude Dev Kit, installing it into a Python project, creating a user story file, and watching the 10-phase workflow execute from context validation through final report. You will have a working implementation with tests and quality metrics by the end.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
 
-### Step 1: Set up your local environment
+  <Step title="Clone the Claude Dev Kit repository">
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Clone the framework into your home directory. This is the global installation location — the kit lives here and gets copied into individual projects during installation.
 
-### Step 2: Deploy your changes
+    ```bash
+    git clone https://github.com/vvalotto/claude-dev-kit.git ~/.claude-dev-kit
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    You should see output similar to:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```
+    Cloning into '/home/your-user/.claude-dev-kit'...
+    remote: Counting objects: 100% ...
+    Resolving deltas: 100% ...
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Note>
+      If you already cloned the repository previously, pull the latest changes before continuing: `cd ~/.claude-dev-kit && git pull origin main`
+    </Note>
 
-### Step 3: Go live
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Navigate to your project and run the installer">
+
+    Change into your Python project directory — or create a new one — then run the installer:
+
+    ```bash
+    cd ~/my-python-project
+    python ~/.claude-dev-kit/install/installer.py
+    ```
+
+    If you do not have an existing project and want to create one for testing:
+
+    ```bash
+    mkdir ~/my-python-project && cd ~/my-python-project
+    git init
+    python -m venv venv
+    source venv/bin/activate   # Windows: venv\Scripts\activate
+    mkdir -p src tests docs
+    touch src/__init__.py tests/__init__.py
+    python ~/.claude-dev-kit/install/installer.py
+    ```
+
+    The installer copies the `skills/`, `templates/`, and `tracking/` directories from the kit into `.claude/` inside your project, then generates a `config.json` and a `CLAUDE.md` file.
+
+  </Step>
+
+  <Step title="Pick a stack profile">
+
+    The installer launches an interactive profile selector:
+
+    ```
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    🚀 Claude Dev Kit - Installer v1.0
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    Perfiles disponibles:
+
+    1. PyQt + MVC (pyqt-mvc)
+       PyQt6 applications with MVC architecture
+
+    2. FastAPI + REST (fastapi-rest)
+       FastAPI REST APIs with layered architecture
+
+    3. Flask REST API (flask-rest)
+       Flask REST APIs with layered architecture (Services → Domain → Data)
+
+    4. Flask WebApp (flask-webapp)
+       Flask fullstack webapps with Jinja2 templates and SSR
+
+    5. Generic Python (generic-python)
+       Generic Python projects without specific framework
+
+    Selecciona un perfil [1-5]:
+    ```
+
+    Select the number that matches your project's stack. If you are unsure, choose **5 (generic-python)** — it works with any Python project and you can switch later.
+
+    <Tip>
+      To skip the interactive prompt, pass the profile directly: `python ~/.claude-dev-kit/install/installer.py --profile generic-python --yes`
+    </Tip>
+
+    After you confirm, the installer outputs:
+
+    ```
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ✅ Instalación completada exitosamente!
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    Próximos pasos:
+    1. Revisar CLAUDE.md generado
+    2. Configurar tu proyecto en .claude/config.json
+    3. Ejecutar: /implement-us US-001
+    ```
+
+    Verify that the `.claude/` directory was created correctly:
+
+    ```bash
+    ls .claude/
+    # config.json  skills/  templates/  tracking/
+    ```
+
+  </Step>
+
+  <Step title="Create a user story file">
+
+    Claude Dev Kit reads user stories from Markdown files. Create the `docs/user-stories/` directory and write your first user story:
+
+    ```bash
+    mkdir -p docs/user-stories
+    ```
+
+    ```markdown
+    # US-001: Simple Calculator
+
+    **Priority:** High
+    **Estimate:** 2 hours
+
+    ## Description
+
+    As an application user, I want a simple calculator that adds two numbers,
+    so I can perform basic math operations quickly and reliably.
+
+    ## Acceptance Criteria
+
+    - The function accepts two numbers (integers or floats) as parameters
+    - Returns the correct sum of both numbers
+    - Handles edge cases:
+      - Sum of negative numbers
+      - Sum with zero
+      - Sum of very large numbers
+
+    ## Technical Notes
+
+    - Implement in module `src/calculator.py`
+    - Tests in `tests/test_calculator.py`
+    - Use pytest for testing
+    ```
+
+    Save this file as `docs/user-stories/US-001.md`.
+
+    <Note>
+      The acceptance criteria section is what Phase 1 uses to generate Gherkin scenarios. Clear, testable criteria produce better BDD output.
+    </Note>
+
+  </Step>
+
+  <Step title="Run /implement-us US-001">
+
+    Open Claude Code in your project directory and run:
+
+    ```
+    /implement-us US-001
+    ```
+
+    The skill executes all 10 phases in sequence:
+
+    ```
+    🚀 Starting implementation of US-001: Simple Calculator
+
+    Phase 0: ✅ Context validation
+      - Python project detected
+      - US-001.md found at docs/user-stories/US-001.md
+      - Prerequisites verified
+
+    Phase 1: 📝 BDD scenario generation
+      Creating: tests/features/US-001-calculator.feature
+
+    Phase 2: 📋 Implementation plan
+      Creating: docs/plans/US-001-plan.md
+
+      ⏸️  STOP — Review the plan and approve to continue.
+
+    Phase 3: 💻 Code implementation
+      Creating: src/calculator.py
+
+    Phase 4: 🧪 Unit tests
+      Creating: tests/unit/test_calculator.py
+
+    Phase 5: 🔗 Integration tests
+      Creating: tests/integration/test_calculator_integration.py
+
+    Phase 6: ✅ BDD validation
+      Running: pytest tests/features/
+
+    Phase 7: 📊 Quality gates
+      Pylint: 9.2/10 ✅
+      Coverage: 97% ✅
+      Cyclomatic complexity: 2 ✅
+      Creating: quality/reports/US-001-quality.json
+
+    Phase 8: 📚 Documentation
+      Updated docstrings and architecture docs
+
+    Phase 9: 📄 Final report
+      Creating: docs/reports/US-001-report.md
+
+      ⏸️  STOP — Confirm the report file exists on disk to complete.
+
+    ✅ US-001 complete — 1h 45min (estimated 2h, -15min variance)
+    ```
+
+    <Warning>
+      Phase 2 and Phase 9 include blocking stops. At Phase 2, review `docs/plans/US-001-plan.md` and confirm you want to proceed with implementation. At Phase 9, verify the report file exists before signaling completion.
+    </Warning>
+
+    After all phases complete, your project will contain:
+
+    ```
+    my-python-project/
+    ├── src/
+    │   └── calculator.py              # Implemented code
+    ├── tests/
+    │   ├── unit/
+    │   │   └── test_calculator.py     # Unit tests
+    │   ├── integration/
+    │   │   └── test_calculator_integration.py
+    │   ├── features/
+    │   │   └── US-001-calculator.feature
+    │   └── step_defs/
+    │       └── test_calculator_steps.py
+    ├── docs/
+    │   ├── plans/
+    │   │   ├── US-001-context.md
+    │   │   └── US-001-plan.md
+    │   └── reports/
+    │       └── US-001-report.md
+    └── quality/
+        └── reports/
+            └── US-001-quality.json
+    ```
+
+  </Step>
+
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation reference" icon="download" href="/installation">
+    Platform-specific setup for Linux, macOS, and Windows. All CLI flags explained.
+  </Card>
+  <Card title="implement-us skill overview" icon="wand-magic-sparkles" href="/skill/overview">
+    How the skill orchestrates all 10 phases and how to intervene at any point.
+  </Card>
+  <Card title="Stack profiles" icon="layer-group" href="/concepts/profiles">
+    Switch profiles or customize quality gate thresholds and architecture patterns.
+  </Card>
+  <Card title="Time tracking" icon="clock" href="/concepts/tracking">
+    Use `/track-pause`, `/track-resume`, and `/track-report` to manage and review time data.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

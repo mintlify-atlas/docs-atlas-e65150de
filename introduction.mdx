@@ -1,0 +1,75 @@
+---
+title: "Claude Dev Kit: Domain-Agnostic User Story Automation"
+description: "Claude Dev Kit automates Python user stories with Claude Code: BDD, code, tests, quality gates, and reports across 10 phases using 6 stack profiles."
+---
+
+Claude Dev Kit is a domain-agnostic framework that automates the complete implementation cycle of user stories using Claude Code. Rather than managing BDD scenario writing, implementation planning, test generation, quality validation, and reporting as separate manual steps, Claude Dev Kit orchestrates all of them through a single skill command — `/implement-us` — with automatic time tracking built in throughout.
+
+The problem it solves is consistency and traceability: every user story goes through the same rigorous 10-phase workflow, producing the same set of artifacts (feature files, implementation plans, tests, quality reports, and a final summary) regardless of which developer or session is doing the work.
+
+## The 10-phase workflow
+
+Running `/implement-us US-001` triggers the following phases in order:
+
+| Phase | Name | Key output |
+|-------|------|------------|
+| **0** | Context validation | `docs/plans/{US_ID}-context.md` |
+| **1** | BDD scenario generation | `tests/features/{US_ID}-{name}.feature` |
+| **2** | Implementation plan *(approval gate)* | `docs/plans/{US_ID}-plan.md` |
+| **3** | Code implementation | Source files per active profile |
+| **4** | Unit tests | `tests/unit/test_*.py` |
+| **5** | Integration tests | `tests/integration/test_*.py` |
+| **6** | BDD validation | `tests/step_defs/test_*_steps.py` |
+| **7** | Quality gates | `quality/reports/{US_ID}-quality.json` |
+| **8** | Documentation | Updated docstrings and architecture docs |
+| **9** | Final report *(approval gate)* | `docs/reports/{US_ID}-report.md` |
+
+Phases 2 and 9 include blocking stops that require your approval before proceeding — Phase 2 so you can review the implementation plan, and Phase 9 to confirm the report file exists on disk before the skill exits.
+
+## Stack profiles
+
+Claude Dev Kit ships with six built-in stack profiles. Each profile configures the architecture pattern, test framework, component types, design patterns, and quality gate thresholds for that stack.
+
+| Profile | Stack | Architecture | Test framework | Min. coverage |
+|---------|-------|--------------|----------------|---------------|
+| `pyqt-mvc` | PyQt6 desktop | MVC | pytest-qt | 90% |
+| `fastapi-rest` | FastAPI REST API | Layered | pytest | 95% |
+| `flask-rest` | Flask REST API | Layered | pytest | 95% |
+| `flask-webapp` | Flask fullstack web | BFF + SSR | pytest | 90% |
+| `generic-python` | Any Python project | Modular | pytest | 95% |
+| `hexagonal-ddd-bc` | Python (any) | Hexagonal + DDD | pytest | 90% (domain+app) |
+
+You select a profile during installation and it is written to `.claude/config.json`. You can switch profiles at any time by re-running the installer with a different `--profile` flag.
+
+## Prerequisites
+
+Before installing Claude Dev Kit, confirm the following are available in your environment:
+
+- **Python 3.9 or higher** — verify with `python --version`
+- **Git 2.0 or higher** — verify with `git --version`
+- **Claude Code CLI** — verify with `claude --version`
+
+A Python project directory is recommended but not required. You can install into an empty directory and create project structure afterward.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the framework and run your first `/implement-us` in under 15 minutes.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Full installation reference with platform-specific steps, CLI flags, and troubleshooting.
+  </Card>
+  <Card title="implement-us skill" icon="wand-magic-sparkles" href="/skill/overview">
+    Deep dive into the skill that orchestrates all 10 phases.
+  </Card>
+  <Card title="Stack profiles" icon="layer-group" href="/concepts/profiles">
+    Compare all five profiles and learn how to customize them for your project.
+  </Card>
+  <Card title="Time tracking" icon="clock" href="/concepts/tracking">
+    Automatic per-phase time tracking, pause/resume commands, and variance reports.
+  </Card>
+  <Card title="Template system" icon="file-code" href="/concepts/templates">
+    35+ parameterized snippets for BDD, planning, testing, and reporting.
+  </Card>
+</CardGroup>

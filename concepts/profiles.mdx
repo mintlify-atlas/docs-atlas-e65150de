@@ -1,0 +1,209 @@
+---
+title: "Stack Profiles: Customize the Framework Per Project"
+description: "Profiles configure Claude Dev Kit for a specific Python stack — setting the architecture pattern, test framework, quality thresholds, and component structure."
+---
+
+A profile is a JSON file that overrides the generic defaults in `config.json` to match your project's stack. When you install Claude Dev Kit, the installer asks you to pick one profile. Every phase agent then reads from that profile to generate idiomatic code, tests, and reports for your specific architecture.
+
+## Available profiles
+
+| Profile | Stack | Architecture | Test framework | Min coverage |
+|---------|-------|--------------|----------------|--------------|
+| `pyqt-mvc` | PyQt6 desktop | MVC | pytest-qt | 90% |
+| `fastapi-rest` | FastAPI | Layered (router → service → repository) | pytest-asyncio | 95% |
+| `flask-rest` | Flask API | Layered (blueprints) | pytest-flask | 95% |
+| `flask-webapp` | Flask web app | BFF + SSR | pytest-flask | 90% |
+| `generic-python` | Python (any) | Flexible | pytest | 95% |
+| `hexagonal-ddd-bc` | Python (any framework) | Hexagonal + DDD, BC-first | pytest + httpx | 90% (domain + application layers only) |
+
+<Note>
+The `hexagonal-ddd-bc` profile applies its coverage threshold only to `src/{bc}/domain/` and `src/{bc}/application/`. Infrastructure and API layers are excluded from the minimum.
+</Note>
+
+## Key fields in a profile JSON
+
+Each profile customizes four areas:
+
+<Tabs>
+  <Tab title="quality_gates">
+    Defines the thresholds Phase 7 enforces. The phase reads these values at runtime — they are never hardcoded.
+
+    ```json
+    "quality_gates": {
+      "pylint": {
+        "enabled": true,
+        "min_score": 8.5
+      },
+      "cyclomatic_complexity": {
+        "enabled": true,
+        "max_per_function": 10,
+        "tool": "radon"
+      },
+      "maintainability_index": {
+        "enabled": true,
+        "min_score": 25,
+        "tool": "radon"
+      },
+      "coverage": {
+        "enabled": true,
+        "min_percent": 95.0,
+        "tool": "pytest-cov"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="component_structure">
+    Specifies the file layout for a feature. The `fastapi-rest` profile, for example, defines a feature directory containing `router.py`, `service.py`, `repository.py`, `schemas.py`, and `models.py`, with separate test paths for each layer.
+
+    ```json
+    "component_structure": {
+      "api_feature": {
+        "base_path": "app/api/{feature_name}/",
+        "files": {
+          "router": { "filename": "router.py" },
+          "service": { "filename": "service.py" },
+          "repository": { "filename": "repository.py" },
+          "schemas": { "filename": "schemas.py" },
+          "models": { "filename": "models.py" }
+        },
+        "test_files": {
+          "test_router": "tests/api/test_{feature_name}_router.py",
+          "test_service": "tests/services/test_{feature_name}_service.py",
+          "test_repository": "tests/repositories/test_{feature_name}_repository.py"
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="variables">
+    Overrides the skill's global variables for this stack. These values are substituted into templates and phase agent instructions.
+
+    ```json
+    "variables": {
+      "architecture_pattern": { "default": "layered" },
+      "component_type": { "default": "Endpoint" },
+      "component_path": { "default": "app/api/{name}/" },
+      "test_framework": { "default": "pytest + httpx" },
+      "base_class": { "default": "BaseModel" },
+      "project_root": { "default": "app/" }
+    }
+    ```
+  </Tab>
+  <Tab title="bdd_config">
+    Controls how BDD scenarios are generated in Phase 1, including the feature template and step patterns.
+
+    ```json
+    "bdd_config": {
+      "runner": "pytest-bdd",
+      "feature_template": "templates/bdd/api-scenario.feature",
+      "tag_prefix": "@US-",
+      "step_patterns": {
+        "given_api": "Given the API is available",
+        "when_request": "When a {method} request is sent to {endpoint}",
+        "then_response": "Then the response has status code {status}"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Profile differences at a glance
+
+<Tabs>
+  <Tab title="pyqt-mvc">
+    ```json
+    {
+      "architecture_pattern": "mvc",
+      "component_type": "Panel",
+      "component_path": "app/presentacion/{name}/",
+      "test_framework": "pytest-qt",
+      "base_class": "QWidget",
+      "quality_gates": { "coverage": { "min_percent": 90.0 } }
+    }
+    ```
+  </Tab>
+  <Tab title="fastapi-rest">
+    ```json
+    {
+      "architecture_pattern": "layered",
+      "component_type": "Endpoint",
+      "component_path": "app/api/{name}/",
+      "test_framework": "pytest + httpx",
+      "base_class": "BaseModel",
+      "quality_gates": {
+        "pylint": { "min_score": 8.5 },
+        "maintainability_index": { "min_score": 25 },
+        "coverage": { "min_percent": 95.0 }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="generic-python">
+    ```json
+    {
+      "architecture_pattern": "generic",
+      "component_type": "Module",
+      "component_path": "src/{name}/",
+      "test_framework": "pytest",
+      "base_class": "object",
+      "quality_gates": {
+        "pylint": { "min_score": 8.0 },
+        "coverage": { "min_percent": 95.0 }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="hexagonal-ddd-bc">
+    ```json
+    {
+      "architecture_pattern": "hexagonal",
+      "component_type": "AggregateRoot",
+      "component_path": "src/{bc}/domain/aggregates/",
+      "test_framework": "pytest + httpx",
+      "project_root": "src/",
+      "quality_gates": {
+        "coverage": {
+          "min_percent": 90.0,
+          "scope": "src/{bc}/domain/ + src/{bc}/application/"
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Selecting a profile during installation
+
+Run the installer and select your profile interactively:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py
+```
+
+To skip the interactive prompt, pass the profile name directly:
+
+```bash
+python ~/.claude-dev-kit/install/installer.py --profile fastapi-rest
+```
+
+Valid profile names: `pyqt-mvc`, `fastapi-rest`, `flask-rest`, `flask-webapp`, `generic-python`, `hexagonal-ddd-bc`.
+
+## Switching profiles after installation
+
+Profile files live at `.claude/skills/implement-us/customizations/`. To switch:
+
+1. Run the installer again with the new profile name, **or**
+2. Manually copy the profile file into `.claude/skills/implement-us/customizations/` and update `.claude/skills/implement-us/config.json` to reference it.
+
+<Tip>
+You can create a custom profile by copying the closest existing profile and editing the values. Any field present in the custom file overrides the base `config.json` default.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="How it works" icon="circle-nodes" href="/concepts/how-it-works">
+    See how profiles are applied across each of the 10 phases.
+  </Card>
+  <Card title="Customization guide" icon="gear" href="/guides/customization">
+    Create a custom profile for stacks not covered by the built-in options.
+  </Card>
+</CardGroup>

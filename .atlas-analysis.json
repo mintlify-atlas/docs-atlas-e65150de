@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Claude Dev Kit",
+  "projectType": "framework",
+  "projectName": "Claude Dev Kit",
+  "projectDescription": "A domain-agnostic framework for automated user story implementation with Claude Code, providing reusable skills, parameterized templates, and automatic time tracking across 10 structured phases.",
   "theme": "palm",
-  "colors": {
-    "primary": "#94cb04",
-    "light": "#545454"
-  },
-  "favicon": "https://media.brand.dev/288cc7c4-5cef-4376-950b-bdf0083eedae.png",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/vvalotto/claude-dev-kit"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/vvalotto/claude-dev-kit"
-    }
-  },
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -95,5 +83,26 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "10-phase automated user story implementation workflow (BDD → code → tests → quality gates → report)",
+    "6 technology stack profiles: pyqt-mvc, fastapi-rest, flask-rest, flask-webapp, generic-python, hexagonal-ddd-bc",
+    "Automatic time tracking per phase and task with variance reporting",
+    "Parameterized template system with 35+ code snippets per stack",
+    "Quality gates validation: Pylint, cyclomatic complexity, maintainability index, coverage",
+    "Cross-platform installer (Linux, macOS, Windows) with interactive profile selection",
+    "5 tracking slash commands: /track-pause, /track-resume, /track-status, /track-report, /track-history"
+  ],
+  "publicApiSurface": [
+    "/implement-us <US-ID> — main skill to run full 10-phase implementation workflow",
+    "/track-pause [reason] — pause time tracking with optional reason",
+    "/track-resume — resume tracking after a pause",
+    "/track-status — view current tracking state",
+    "/track-report <US-ID> — generate detailed time report for a user story",
+    "/track-history [--last N] — view tracking history",
+    "installer.py --profile <profile> [--yes] [--dry-run] — cross-platform installer",
+    "TimeTracker(us_id, us_title, us_points, producto) — core tracking class",
+    "Phase(phase_number, phase_name) — phase tracking dataclass",
+    "Task(task_id, task_name, task_type, estimated_minutes) — task tracking dataclass"
+  ]
 }

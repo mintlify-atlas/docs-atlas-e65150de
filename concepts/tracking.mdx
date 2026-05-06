@@ -1,0 +1,246 @@
+---
+title: "Time Tracking: Automatic Phase and Task Time Metrics"
+description: "Claude Dev Kit records time for every phase and task automatically. Use five slash commands to pause, resume, and report on your implementation sessions."
+---
+
+The tracking system records elapsed time for each of the 10 phases and for individual tasks within Phase 3. Tracking starts the moment you run `/implement-us` and continues automatically — no setup required. Each session is stored as a JSON file at `.claude/tracking/{US_ID}-tracking.json`, and remains accessible via report commands even after the session completes.
+
+## What tracking records
+
+The system uses three Python dataclasses as its data model:
+
+**`Task`** — an individual unit of work within Phase 3:
+
+```python
+task_id: str               # e.g. "task_001"
+task_name: str             # e.g. "Implement DisplayModelo"
+task_type: str             # e.g. "modelo", "vista", "test"
+estimated_minutes: float   # from the implementation plan
+started_at: datetime
+completed_at: datetime
+elapsed_seconds: int
+file_created: str          # path of the file produced (optional)
+status: str                # "pending" | "in_progress" | "completed"
+```
+
+Computed properties: `actual_minutes`, `variance_minutes` (actual − estimated), `variance_percent`.
+
+**`Phase`** — one of the 10 implementation phases:
+
+```python
+phase_number: int          # 0–9
+phase_name: str
+started_at: datetime
+completed_at: datetime
+elapsed_seconds: int
+status: str                # "pending" | "in_progress" | "completed"
+tasks: List[Task]
+auto_approved: bool
+user_approval_time_seconds: int
+```
+
+**`Pause`** — a manual interruption:
+
+```python
+pause_id: str              # e.g. "pause_001"
+started_at: datetime
+resumed_at: datetime       # None while pause is active
+duration_seconds: int
+reason: str
+```
+
+## Persistence
+
+Each user story session is saved to:
+
+```
+.claude/tracking/{US_ID}-tracking.json
+```
+
+The file is written after every state change (phase start, phase end, task completion, pause, resume). Its top-level structure is:
+
+```json
+{
+  "metadata": { "us_id": "US-001", "us_title": "...", "us_points": 3, "producto": "my_app" },
+  "timeline": { "started_at": "...", "completed_at": "...", "total_elapsed_seconds": 0, "effective_seconds": 0, "paused_seconds": 0 },
+  "phases": [ ... ],
+  "pauses": [ ... ],
+  "summary": {
+    "total_tasks": 8,
+    "completed_tasks": 8,
+    "estimated_total_minutes": 120,
+    "actual_total_minutes": 105,
+    "variance_minutes": -15,
+    "variance_percent": -12.5
+  }
+}
+```
+
+`effective_seconds` is total elapsed time minus paused time. `variance_percent` is calculated as `(actual − estimated) / estimated × 100`.
+
+## How tracking starts automatically
+
+Each phase file in `.claude/skills/implement-us/phases/` contains a `🔴 Acción Requerida` section with bash directives that the agent executes at phase boundaries:
+
+```bash
+# Phase 0: create the session and start the first phase
+python .claude/tracking/track.py start-phase 0 "Validación de Contexto" --us US-001
+
+# All other phases: continue the existing session
+python .claude/tracking/track.py start-phase 1 "Generación de Escenarios BDD"
+
+# Close a phase
+python .claude/tracking/track.py end-phase 1
+
+# Close the full session (Phase 9 only, after end-phase 9)
+python .claude/tracking/track.py end-tracking
+```
+
+The `--us` argument is required only for the Phase 0 call, when no tracking file exists yet.
+
+## The 5 tracking commands
+
+### `/track-pause`
+
+Pauses the active tracking session. Pass an optional reason.
+
+```bash
+/track-pause "Lunch break"
+/track-pause "Waiting for API key"
+```
+
+Output:
+
+```
+⏸️  Tracking paused
+   Current duration: 42min 15s
+```
+
+### `/track-resume`
+
+Resumes a paused session. Records the pause duration.
+
+```bash
+/track-resume
+```
+
+Output:
+
+```
+▶️  Tracking resumed
+   Pause: 32min
+```
+
+### `/track-status`
+
+Displays a live snapshot of the current session.
+
+```bash
+/track-status
+```
+
+Output:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️  TRACKING STATUS - US-001
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Progress:     Implementación
+📋 Current task: Implement UserService
+
+⏰ Times:
+   • Started:    2026-02-14 09:00
+   • Elapsed:    1h 12min
+   • Effective:  0h 40min
+   • Paused:     32min
+   • Status:     ▶️  RUNNING
+
+✅ Completed: 5/8 tasks
+```
+
+### `/track-report`
+
+Generates a full report for a specific user story. If no `US_ID` is provided, reports on the currently active session.
+
+```bash
+/track-report US-001
+```
+
+Output:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 REPORTE DE TRACKING - US-001
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Historia: Calculadora Simple
+🎯 Puntos: 3
+📦 Producto: mi_app
+⏱️  Estado: ✅ COMPLETADO
+
+━━━ Tiempos ━━━
+
+• Total:     1h 45min
+• Efectivo:  1h 13min
+• Pausado:   32min
+
+━━━ Progreso ━━━
+
+• Fases completadas: 10/10
+• Tareas completadas: 8/8
+
+━━━ Estimaciones ━━━
+
+• Estimado: 120 min
+• Real:      105 min
+• Varianza:  -12.5%
+
+━━━ Archivos ━━━
+
+• Tracking: .claude/tracking/US-001-tracking.json
+• Reporte:  docs/reports/US-001-tracking-report.md
+```
+
+### `/track-history`
+
+Lists all tracked user stories, sorted by date descending. Supports optional filters.
+
+```bash
+/track-history
+/track-history --last 5
+/track-history --producto my_api
+/track-history --desde 2026-02-01
+```
+
+Output format per row:
+
+```
+✅ US-001 | Calculadora Simple              | 3pts |    1h 45min |  -12% | 2026-02-14
+```
+
+Aggregate statistics (average time per story point, average variance, total stories) appear at the bottom.
+
+## Variance calculation
+
+Variance is computed from tasks — not phases. Each `Task` records `estimated_minutes` from the implementation plan and calculates `actual_minutes` from `elapsed_seconds`. The session-level `variance_percent` in the `summary` block is:
+
+```
+variance_percent = (actual_total_minutes - estimated_total_minutes)
+                  / estimated_total_minutes × 100
+```
+
+A negative variance means the implementation finished faster than estimated. Positive means it took longer.
+
+<Tip>
+The variance threshold in `config.json` is set to 20%. If your session consistently exceeds this, it is a signal to revisit your plan estimates in Phase 2.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="Tracking commands reference" icon="terminal" href="/reference/tracking-commands">
+    Full command reference with all options and output fields.
+  </Card>
+  <Card title="Tracking architecture" icon="database" href="/reference/tracking-architecture">
+    Data model, persistence format, and JSON schema details.
+  </Card>
+</CardGroup>

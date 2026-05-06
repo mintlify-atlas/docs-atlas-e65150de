@@ -1,0 +1,155 @@
+---
+title: "Parameterized Templates: Variables, Snippets, and Profiles"
+description: "Templates use {VARIABLE_NAME} placeholders and {SNIPPET:id} blocks to generate stack-specific BDD scenarios, plans, tests, and reports automatically."
+---
+
+Templates are model files with two types of placeholders: simple `{VARIABLE_NAME}` substitutions and conditional `{SNIPPET:id}` blocks. When a phase runs, the skill resolves both types from the active profile and writes the result to the target path. The same template file works across all supported stacks because the profile supplies the values that make the output idiomatic.
+
+## Template types
+
+Four template types cover the main generated artifacts:
+
+| Template | Phase | Source file | Output path |
+|----------|-------|-------------|-------------|
+| BDD scenarios | Phase 1 | `templates/bdd/scenario.feature` | `tests/features/{US_ID}-{name}.feature` |
+| Implementation plan | Phase 2 | `templates/planning/implementation-plan.md` | `docs/plans/{US_ID}-plan.md` |
+| Unit tests | Phase 4 | `templates/testing/test-unit.py` | `tests/unit/test_{component}.py` |
+| Final report | Phase 9 | `templates/reporting/implementation-report.md` | `docs/reports/{US_ID}-report.md` |
+
+## Variables
+
+Variables use uppercase names enclosed in curly braces: `{VARIABLE_NAME}`. The resolution order is:
+
+1. **Active profile** (`.claude/skills/implement-us/customizations/{profile}.json`)
+2. **Base config** (`.claude/skills/implement-us/config.json`)
+3. **Built-in defaults** in the config's `variables` section
+
+The following variables are used across templates:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{US_ID}` | User story identifier | `US-001` |
+| `{COMPONENT_TYPE}` | Component type from the active profile | `Endpoint`, `Panel`, `Module` |
+| `{ARCHITECTURE_PATTERN}` | Architecture pattern from the active profile | `layered`, `mvc`, `hexagonal` |
+| `{COMPONENT_PATH}` | Base path for generated component files | `app/api/{name}/`, `src/{name}/` |
+| `{TEST_FRAMEWORK}` | Testing framework for the active profile | `pytest-asyncio`, `pytest-qt`, `pytest` |
+| `{BASE_CLASS}` | Base class components should inherit | `BaseModel`, `QWidget`, `object` |
+| `{PROJECT_ROOT}` | Root directory of the project source | `app/`, `src/`, `.` |
+| `{PRODUCT}` | Product or module name | `my_api`, `ux_termostato` |
+
+Additional variables are populated from the user story itself (`{US_TITLE}`, `{USER_ROLE}`, `{USER_WANT}`, `{USER_BENEFIT}`) and from plan data (`{PYLINT_SCORE}`, `{COVERAGE}`, `{TIME_SPENT}`).
+
+## Snippets
+
+Snippets are multi-line blocks — code or markdown — that differ per profile. They use lowercase IDs:
+
+```
+{SNIPPET:snippet_id}
+```
+
+When the skill processes a template, it looks up `snippet_id` in the `snippets` section of the active profile JSON and inserts the content verbatim (preserving indentation). A snippet can be an empty string `""` for profiles where it does not apply — the placeholder is simply removed.
+
+### Available snippets
+
+| Snippet ID | Used in template | Description |
+|------------|-----------------|-------------|
+| `integration_checklist` | `implementation-plan.md` | Stack-specific integration checklist items |
+| `architecture_code_blocks` | `implementation-report.md` | Router registration or module import code |
+| `manual_testing_specifics` | `implementation-report.md` | Manual test instructions relevant to the stack |
+| `test_imports` | `test-unit.py` | Framework-specific import statements |
+| `test_signals_class` | `test-unit.py` | `TestSignals` class (PyQt only; empty string for other profiles) |
+| `test_integration_class` | `test-unit.py` | `TestIntegracion` class body, adapted per stack |
+| `test_fixtures` | `test-unit.py` | pytest fixtures, including async variants where needed |
+
+### Snippet example: `test_imports`
+
+For `fastapi-rest`, the `test_imports` snippet injects async testing imports:
+
+```python
+from httpx import AsyncClient
+from unittest.mock import Mock, patch, AsyncMock
+from dataclasses import replace
+```
+
+For `generic-python`, the same snippet provides synchronous mocking imports:
+
+```python
+from unittest.mock import Mock, patch
+from dataclasses import replace
+```
+
+## The BDD template
+
+Below is the full contents of `templates/bdd/scenario.feature`, showing the variable placeholders exactly as they appear in the source file:
+
+```gherkin
+Feature: {FEATURE_TITLE} ({US_ID})
+  Como {USER_ROLE}
+  Quiero {USER_WANT}
+  Para {USER_BENEFIT}
+
+  Background:
+{BACKGROUND_SETUP}
+
+  Scenario: {SCENARIO_1_NAME}
+    Given {PRECONDITION_1}
+    And {PRECONDITION_2}
+    When {ACTION}
+    Then {EXPECTED_RESULT_1}
+    And {EXPECTED_RESULT_2}
+
+  Scenario: {SCENARIO_2_NAME}
+    Given {PRECONDITION}
+    When {ACTION}
+    Then {EXPECTED_RESULT}
+
+  # Add more scenarios per acceptance criterion
+```
+
+`{BACKGROUND_SETUP}` is a multi-line snippet resolved from the active profile. For example:
+
+- **fastapi-rest:** `Given the API server is running\nAnd environment variables are configured`
+- **generic-python:** `Given the system is initialized\nAnd dependencies are loaded`
+
+### Rendered example (pyqt-mvc profile)
+
+```gherkin
+Feature: Temperature Display (US-001)
+  Como usuario
+  Quiero ver la temperatura actual
+  Para monitorear el termostato
+
+  Background:
+    Given la aplicación está iniciada
+    And la configuración está cargada
+
+  Scenario: Mostrar temperatura actual
+    Given el termostato está conectado
+    And la lectura de temperatura es válida
+    When el usuario abre la aplicación
+    Then se muestra la temperatura en pantalla
+    And el valor es mayor que -50°C
+```
+
+## Generation process
+
+When a phase generates a file:
+
+1. Load the template from `templates/{category}/{name}.ext`
+2. Merge variables from the profile and the user story data
+3. Replace all `{VARIABLE_NAME}` placeholders with their resolved values
+4. Replace all `{SNIPPET:id}` placeholders with the snippet content from the profile
+5. Write the result to the output path
+
+<Info>
+Variables are replaced before snippets. Snippets can themselves contain `{VARIABLE_NAME}` placeholders, but these must already be resolved in step 2 — there is no second pass.
+</Info>
+
+<CardGroup cols={2}>
+  <Card title="Stack profiles" icon="layer-group" href="/concepts/profiles">
+    See how each profile defines its variables and snippet values.
+  </Card>
+  <Card title="Customization guide" icon="gear" href="/guides/customization">
+    Add new variables, create custom snippets, or build a new template from scratch.
+  </Card>
+</CardGroup>

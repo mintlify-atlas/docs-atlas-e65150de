@@ -1,0 +1,222 @@
+---
+title: "Tracking system: architecture and data model guide"
+description: "Technical architecture of the three Python tracking modules, dataclass fields, JSON persistence schema, and integration with implement-us phases."
+---
+
+The tracking system is a lightweight Python module that measures time automatically during every `/implement-us` session. It requires no external services: data is written to a local JSON file after each operation, so sessions survive process restarts and manual edits.
+
+## The three core modules
+
+```
+tracking/
+├── time_tracker.py   # Core dataclasses and TimeTracker manager
+├── commands.py       # Five /track-* slash command handlers
+└── reports.py        # Markdown report generation
+```
+
+### time_tracker.py
+
+The central module. Defines four dataclasses (`Task`, `Phase`, `Pause`, `TimeTracker`) and handles all state transitions and persistence.
+
+| Class | Role |
+|-------|------|
+| `Task` | One unit of work within a phase |
+| `Phase` | One of the 10 implement-us phases (0–9) |
+| `Pause` | A manual pause created by `/track-pause` |
+| `TimeTracker` | Session manager: owns phases, pauses, and all lifecycle methods |
+
+### commands.py
+
+Implements the five slash commands as plain Python functions that return a `Dict[str, Any]`. Each function locates the active tracking file (via `_find_active_tracking()`), loads a `TimeTracker` from it, delegates to the appropriate method, and returns a formatted message for display.
+
+| Function | Slash command |
+|----------|--------------|
+| `track_pause(reason)` | `/track-pause` |
+| `track_resume()` | `/track-resume` |
+| `track_status()` | `/track-status` |
+| `track_history(last, producto, desde)` | `/track-history` |
+| `track_report(us_id)` | `/track-report` |
+
+### reports.py
+
+Generates formatted output from tracking JSON data.
+
+| Function | Output |
+|----------|--------|
+| `format_duration(seconds)` | Human-readable string, e.g. `"2h 15m 30s"` |
+| `format_timestamp(iso_timestamp)` | `"YYYY-MM-DD HH:MM:SS UTC"` |
+| `generate_full_report(tracking_data)` | Complete markdown report |
+| `generate_history_table(tracking_dir, last_n)` | Markdown history table |
+
+---
+
+## Dataclass reference
+
+### Task
+
+```python
+@dataclass
+class Task:
+    task_id: str                        # e.g. "task_001"
+    task_name: str                      # e.g. "Implementar DisplayModelo"
+    task_type: str                      # modelo | vista | controlador | test
+    estimated_minutes: float            # from the implementation plan
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    elapsed_seconds: int = 0
+    file_created: Optional[str] = None  # path of the file produced
+    status: str = "pending"             # pending | in_progress | completed
+```
+
+**Computed properties:**
+
+| Property | Formula |
+|----------|---------|
+| `actual_minutes` | `elapsed_seconds / 60` |
+| `variance_minutes` | `actual_minutes - estimated_minutes` |
+| `variance_percent` | `(variance_minutes / estimated_minutes) × 100` |
+
+### Phase
+
+```python
+@dataclass
+class Phase:
+    phase_number: int                   # 0–9
+    phase_name: str                     # e.g. "Validación de Contexto"
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    elapsed_seconds: int = 0
+    status: str = "pending"             # pending | in_progress | completed
+    tasks: List[Task] = field(default_factory=list)
+    auto_approved: bool = True          # False when user reviewed manually
+    user_approval_time_seconds: int = 0 # time spent at approval gate
+```
+
+**Computed properties:**
+
+| Property | Formula |
+|----------|---------|
+| `elapsed_minutes` | `elapsed_seconds / 60` |
+
+### Pause
+
+```python
+@dataclass
+class Pause:
+    pause_id: str                       # e.g. "pause_001"
+    started_at: datetime
+    resumed_at: Optional[datetime] = None
+    duration_seconds: int = 0
+    reason: str = ""
+```
+
+**Computed properties:**
+
+| Property | Formula |
+|----------|---------|
+| `duration_minutes` | `duration_seconds / 60` |
+| `is_active` | `resumed_at is None` |
+
+### TimeTracker
+
+```python
+class TimeTracker:
+    us_id: str                          # e.g. "US-001"
+    us_title: str
+    us_points: int
+    producto: str                       # e.g. "ux_termostato"
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    phases: List[Phase]
+    pauses: List[Pause]
+    current_phase: Optional[Phase]      # the phase in progress
+    current_task: Optional[Task]        # the task in progress
+    current_pause: Optional[Pause]      # None if not paused
+    storage_path: Path                  # .claude/tracking/{us_id}-tracking.json
+```
+
+**Key methods:**
+
+| Method | Triggered by |
+|--------|-------------|
+| `start_tracking()` | Skill Phase 0 start |
+| `start_phase(number, name)` | Each phase start |
+| `end_phase(number, auto_approved)` | Each phase end |
+| `start_task(id, name, type, estimated)` | Each task start in Phase 3 |
+| `end_task(id, file_created)` | Each task completion in Phase 3 |
+| `pause(reason)` | `/track-pause` |
+| `resume()` | `/track-resume` |
+| `end_tracking()` | Skill Phase 9 end |
+| `get_status()` | `/track-status` |
+| `from_json(path)` | Restore session from disk |
+
+---
+
+## State machines
+
+Both `Phase` and `Task` follow the same three-state lifecycle:
+
+```
+pending → in_progress → completed
+```
+
+- `pending`: created but not yet started
+- `in_progress`: `started_at` set, `completed_at` is `None`
+- `completed`: both timestamps set, `elapsed_seconds` calculated
+
+`TimeTracker` is considered active while `completed_at` is `None` at the timeline level. `_find_active_tracking()` in `commands.py` uses this field to locate the current session.
+
+---
+
+## Persistence
+
+Every call to a state-modifying method ends with `self._save()`, which serializes the full tracker state to JSON via `_to_dict()`:
+
+```
+.claude/tracking/{US_ID}-tracking.json
+```
+
+The file contains `metadata`, `timeline`, `phases`, `pauses`, and `summary` (see [Tracking reports](/reference/tracking-reports) for the full schema). The session can be fully restored from this file using `TimeTracker.from_json(path)`.
+
+<Tip>
+  The JSON file is human-readable. You can inspect it at any point during a session to verify that tracking is working correctly.
+</Tip>
+
+---
+
+## Integration with implement-us phases
+
+The skill invokes the tracking system through **bash imperatives** placed in `🔴 Acción Requerida` sections of each phase file. This ensures the agent executes the commands rather than treating them as documentation.
+
+```bash
+# Start of Phase 0 (creates the tracking file; --us is required)
+python .claude/tracking/track.py start-phase 0 "Validación de Contexto" --us US-001
+
+# Start of phases 1–9 (file already exists; --us is optional)
+python .claude/tracking/track.py start-phase 1 "Generación BDD"
+
+# End of each phase
+python .claude/tracking/track.py end-phase 0
+
+# End of Phase 9 (closes the session)
+python .claude/tracking/track.py end-tracking
+```
+
+The CLI entry point is `tracking/track.py`. It parses subcommands (`start-phase`, `end-phase`, `start-task`, `end-task`, `end-tracking`) and delegates to the `TimeTracker` API.
+
+### Auto-pause at approval gates
+
+Phases 2 and 9 have explicit user approval gates (STOP blocks). The skill pauses the tracking timer automatically while waiting for approval, so user review time is not counted as implementation time. This is why `Phase.auto_approved` may be `false` and `user_approval_time_seconds` may be non-zero for those phases.
+
+---
+
+## Design decisions
+
+**Why JSON instead of a database?**
+JSON is human-readable, requires no setup, and is portable across machines. The file can hold hundreds of user stories without performance concerns.
+
+**Why dataclasses?**
+Dataclasses provide clear type hints, make computed properties (like `variance_percent`) easy to express, and serialise cleanly with `asdict()`.
+
+**Why bash imperatives instead of Python API calls?**
+Earlier versions used Python code blocks in phase files, but the agent interpreted them as documentation examples and did not execute them. Moving to bash imperatives in dedicated `🔴 Acción Requerida` sections guarantees execution (OBS-001, fixed in v1.1).

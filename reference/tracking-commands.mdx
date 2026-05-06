@@ -1,0 +1,214 @@
+---
+title: "Tracking slash commands: a complete reference guide"
+description: "Reference for all five /track-* slash commands: pause, resume, status, history, and report—with syntax, arguments, and sample output."
+---
+
+The five tracking slash commands let you control and inspect the time-tracking session that runs automatically alongside every `/implement-us` execution. Commands are implemented in `tracking/commands.py` and interact with the active tracking file in `.claude/tracking/`.
+
+## Command summary
+
+| Command | Description |
+|---------|-------------|
+| `/track-pause [reason]` | Pause tracking with an optional reason string |
+| `/track-resume` | Resume after a pause and display elapsed pause time |
+| `/track-status` | Show current US, current phase, elapsed time, and active pauses |
+| `/track-history [--last N]` | List past user stories with total time and variance |
+| `/track-report <US-ID>` | Detailed time and metrics report for one user story |
+
+---
+
+## /track-pause
+
+Pauses the active tracking session. The time elapsed during the pause is not counted toward the effective implementation time.
+
+**Syntax**
+
+```bash
+/track-pause [reason]
+```
+
+<ParamField body="reason" type="string">
+  Optional free-text string describing why you are pausing. For example: `"Daily standup"` or `"Code review"`. Stored in the tracking JSON under `pauses[].reason`.
+</ParamField>
+
+**Behavior**
+
+- Raises an error if no tracking session is active. Start one with `/implement-us` first.
+- Raises an error if a pause is already active.
+- Tracking automatically pauses at the approval gates in Phase 2 (implementation plan review) and Phase 9 (final report review). You do not need to run `/track-pause` at those gates; the skill handles it.
+
+**Example output**
+
+```
+⏸️  Tracking pausado
+   Duración actual: 42min 15s
+```
+
+---
+
+## /track-resume
+
+Resumes a previously paused tracking session and shows how long the pause lasted.
+
+**Syntax**
+
+```bash
+/track-resume
+```
+
+This command takes no arguments.
+
+**Behavior**
+
+- Raises an error if there is no active pause to resume.
+- Calculates `pause.duration_seconds = resumed_at - started_at` and clears `current_pause`.
+
+**Example output**
+
+```
+▶️  Tracking reanudado
+   Pausa: 15min
+```
+
+---
+
+## /track-status
+
+Displays a real-time snapshot of the active tracking session: which phase and task are in progress, how much time has elapsed, how much is paused, and overall task completion.
+
+**Syntax**
+
+```bash
+/track-status
+```
+
+This command takes no arguments.
+
+**Example output**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️  TRACKING STATUS - US-003
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Progreso: Implementación
+📋 Tarea actual: Implementar UserRepository
+
+⏰ Tiempos:
+   • Inicio:       2026-04-09T10:00:00
+   • Transcurrido: 1h 12min
+   • Efectivo:     1h 5min
+   • Pausado:      7min
+   • Estado:       ▶️  EN CURSO
+
+✅ Completadas: 8/15 tareas
+```
+
+**Fields explained**
+
+| Field | Source |
+|-------|--------|
+| Transcurrido | `elapsed_seconds` — wall-clock time since `started_at` |
+| Efectivo | `effective_seconds` — elapsed minus total paused time |
+| Pausado | `paused_seconds` — sum of all `pause.duration_seconds` |
+| Estado | `"paused"` or `"running"` from `get_status()` |
+| Completadas | `completed_tasks / total_tasks` across all phases |
+
+---
+
+## /track-history
+
+Lists all user stories that have been tracked in the current project, sorted by start date (most recent first).
+
+**Syntax**
+
+```bash
+/track-history [--last N]
+```
+
+<ParamField body="--last N" type="integer">
+  Limit output to the N most recent user stories. Omit to show all tracked entries.
+</ParamField>
+
+**Additional filters (via Python API)**
+
+The underlying `track_history()` function also accepts `producto` and `desde` (date string `YYYY-MM-DD`) parameters when invoked programmatically.
+
+**Example output**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 HISTORIAL DE TRACKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ US-003 | Implementar panel de temperatura    | 5pts |     2h 10min |    +8% | 2026-04-09
+✅ US-002 | Agregar validación de formulario    | 3pts |     1h 45min |   -12% | 2026-03-15
+✅ US-001 | Crear módulo de autenticación       | 8pts |     4h 30min |   +22% | 2026-02-28
+
+
+📈 Promedios:
+   • Tiempo por punto: 0.8h
+   • Varianza promedio: +6%
+   • Total USs: 3
+   • Total puntos: 16
+```
+
+---
+
+## /track-report
+
+Generates an immediate human-readable report for a specific user story. You can call it on the active session or on any completed tracking file.
+
+**Syntax**
+
+```bash
+/track-report <US-ID>
+/track-report
+```
+
+<ParamField body="US-ID" type="string">
+  The user story identifier, for example `US-001`. The command reads `.claude/tracking/US-001-tracking.json`. If omitted, the currently active tracking session is used.
+</ParamField>
+
+**Example output**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 REPORTE DE TRACKING - US-001
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Historia: Implementar panel display
+🎯 Puntos: 3
+📦 Producto: ux_termostato
+⏱️  Estado: ✅ COMPLETADO
+
+━━━ Tiempos ━━━
+
+• Total:     1h 45min
+• Efectivo:  1h 38min
+• Pausado:   7min
+
+━━━ Progreso ━━━
+
+• Fases completadas: 10/10
+• Tareas completadas: 15/15
+
+━━━ Estimaciones ━━━
+
+• Estimado: 120 min
+• Real:     105 min
+• Varianza: -12.5%
+
+━━━ Archivos ━━━
+
+• Tracking: .claude/tracking/US-001-tracking.json
+• Reporte:  docs/reports/US-001-tracking-report.md (generado al finalizar)
+```
+
+<Tip>
+  The full markdown report at `docs/reports/{US_ID}-tracking-report.md` is generated automatically when Phase 9 completes. Use `/track-report` for a quick inline summary at any point during implementation.
+</Tip>
+
+<Note>
+  If no tracking file exists for the given `US-ID`, the command returns an error. Tracking files are created automatically when you run `/implement-us`.
+</Note>

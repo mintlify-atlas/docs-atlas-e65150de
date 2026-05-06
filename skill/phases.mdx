@@ -1,0 +1,449 @@
+---
+title: "implement-us phases: complete reference for all 10 phases"
+description: "Full technical breakdown of every phase in the implement-us skill: inputs, artifacts, approval requirements, commands, and exit checklists."
+---
+
+The `implement-us` skill runs 10 sequential phases, each delegated to a specialized agent file under `phases/`. The orchestrator (`skill.md`) coordinates the flow; individual phase files define the exact steps and enforce entry and exit gates. This page documents all 10 phases in detail.
+
+Each phase follows a strict structure: verify entry artifacts exist on disk, start tracking, execute the phase work, verify exit artifacts exist on disk, and close tracking. Phases with `approval_required: true` include an explicit STOP block that prevents autonomous advancement.
+
+<AccordionGroup>
+
+  <Accordion title="Phase 0 — Validation">
+
+    **Objective:** Verify that the project environment has everything needed to implement the user story, classify the story type, and generate the context file that all subsequent phases read.
+
+    **Approval required:** No — the skill advances automatically on completion.
+
+    **What this phase does:**
+
+    1. Starts the tracking session for the current US
+    2. Verifies that all required tools are installed: `pylint`, `radon`, `pytest`, `pytest-bdd`
+    3. Asks you where the user story is located (local file, GitHub Issue, Jira ticket, etc.) and where the architecture documentation is (or if none exists)
+    4. Reads and extracts the US data: title, acceptance criteria, story points, priority
+    5. Reads the active profile from `.claude/skills/implement-us/config.json` and records the architecture pattern and quality thresholds
+    6. Classifies the US type (new feature, improvement, refactoring, bug fix) and proposes whether BDD applies — waits for your confirmation
+    7. Creates `.pylintrc` and `pytest.ini` if they do not exist, using values from the active profile
+    8. Generates `docs/plans/{US_ID}-context.md`
+
+    **Tool verification commands:**
+
+    ```bash
+    python -m pylint --version      # Required: Phase 7
+    python -m radon --version       # Required: Phase 7
+    python -m pytest --version      # Required: Phases 4, 5, 6, 7
+    python -c "import pytest_bdd; print(pytest_bdd.__version__)"  # Required: Phase 6
+    ```
+
+    If any command fails, the skill stops immediately with a clear error. You must install the missing tool before the skill can continue.
+
+    **Entry gate:** None (Phase 0 is the entry point).
+
+    **Key output — `docs/plans/{US_ID}-context.md`:**
+
+    ```markdown
+    # Contexto de Ejecución — {US_ID}
+
+    ## Fuentes
+    - Fuente HU: {fuente_hu}
+    - Fuente Arquitectura: {fuente_arquitectura}
+
+    ## Historia de Usuario
+    - ID: {US_ID}
+    - Título: {US_TITLE}
+    - Tipo: {HU_TYPE}
+    - Puntos: {US_POINTS}
+    - Prioridad: {US_PRIORITY}
+
+    ## Decisiones de Ejecución
+    - BDD: {Sí / No — justificación}
+    - skip_bdd: {true / false}
+    - Fases a ejecutar: 0, [1 si BDD], 2, 3, 4, 5, [6 si BDD], 7, 8, 9
+
+    ## Perfil Activo
+    - Perfil: {PROFILE}
+    - Patrón arquitectónico: {architecture_pattern}
+    - Umbrales de calidad:
+      - pylint ≥ {pylint_min}
+      - CC ≤ {cc_max}
+      - MI ≥ {mi_min}
+      - cobertura ≥ {coverage_min}%
+
+    ## Rutas de Artefactos
+    - Contexto: docs/plans/{US_ID}-context.md
+    - BDD feature: tests/features/{US_ID}-{nombre}.feature
+    - Plan: docs/plans/{US_ID}-plan.md
+    - Reporte: docs/reports/{US_ID}-report.md
+    - Quality report: quality/reports/{US_ID}-quality.json
+    ```
+
+    This file is the single shared source of truth between phases. It prevents phases from depending on conversation memory.
+
+    **Exit checklist:**
+    - All required tools available
+    - US found and data extracted
+    - Architecture pattern read from config and recorded in `context.md`
+    - US type classified and confirmed by you
+    - BDD decision communicated and confirmed
+    - `docs/plans/{US_ID}-context.md` verified on disk (`ls docs/plans/{US_ID}-context.md`)
+    - Quality thresholds sourced from the active profile (not hardcoded)
+
+  </Accordion>
+
+  <Accordion title="Phase 1 — BDD scenario generation">
+
+    **Objective:** Analyze the user story's acceptance criteria and generate BDD scenarios in Gherkin format.
+
+    **Approval required:** Yes — you review the generated scenarios before Phase 2 begins.
+
+    **Entry gate:** `docs/plans/{US_ID}-context.md` must exist on disk.
+
+    **What this phase does:**
+
+    1. Reads the acceptance criteria from the US file (using `fuente_hu` from `context.md`)
+    2. Generates one successful-flow scenario per acceptance criterion, plus additional scenarios for error conditions or alternate states
+    3. Saves the `.feature` file to the canonical path
+    4. Presents the scenarios to you and waits for explicit approval
+
+    **Gherkin structure:**
+
+    Each scenario uses standard Given-When-Then structure:
+
+    ```gherkin
+    Feature: Endpoint for user queries (US-002)
+
+      Scenario: GET /users returns list of active users
+        Given there are 3 active users in the database
+        And there is 1 inactive user
+        When a GET request is sent to /users?status=active
+        Then the response has status code 200
+        And the response contains 3 users
+        And all users have status "active"
+    ```
+
+    **Output artifact:** `tests/features/{US_ID}-{name}.feature`
+
+    The `{name}` segment is a slug of the US title in lowercase with hyphens and no special characters. For example, a title of "User login form" produces `US-001-user-login-form.feature`.
+
+    **Approval prompt:**
+
+    The skill presents the generated file and waits. Respond with:
+    - `[aprobado]` — advance to Phase 2
+    - `[revisar]` — request adjustments to existing scenarios
+    - `[rechazar]` — rewrite from scratch
+
+    Only `[aprobado]` advances the skill.
+
+    **Exit checklist:**
+    - `tests/features/{US_ID}-*.feature` verified on disk
+    - Scenarios presented to you
+    - You responded with `[aprobado]`
+
+  </Accordion>
+
+  <Accordion title="Phase 2 — Implementation plan">
+
+    **Objective:** Create a detailed implementation plan based on the project's configured architecture pattern.
+
+    **Approval required:** Yes — **STOP** — the skill will not advance to Phase 3 without your explicit approval.
+
+    **Entry gate:** `docs/plans/{US_ID}-context.md` must exist on disk.
+
+    **What this phase does:**
+
+    1. Reads the active architecture pattern from `config.json` (`variables.architecture_pattern`)
+    2. Identifies components to create based on the pattern (MVC: model/view/controller; Layered: schema/service/repository/router; Generic: module/utils; etc.)
+    3. Identifies external dependencies and integration points
+    4. Generates a task checklist organized by component
+    5. Saves the plan to disk and presents it to you
+
+    **Output artifact:** `docs/plans/{US_ID}-plan.md`
+
+    Example plan structure (FastAPI / Layered):
+
+    ```markdown
+    # Implementation Plan: US-002 - User query endpoint
+
+    **Pattern:** Layered Architecture
+    **Product:** api_users
+
+    ## Components to Implement
+
+    ### 1. User Endpoint (Layered)
+    - [ ] app/domain/schemas/user_schema.py
+      - UserResponse: Pydantic model for response
+      - UserFilter: Pydantic model for filters
+    - [ ] app/services/user_service.py
+      - UserService: business logic
+      - Method get_users(filter: UserFilter)
+    - [ ] app/repositories/user_repository.py
+      - UserRepository: data access
+      - Dynamic filter queries
+    - [ ] app/api/v1/routers/users.py
+      - GET /users endpoint
+      - Dependency injection of UserService
+
+    ### 2. Integration
+    - [ ] Configure dependency injection
+      - Register UserService in dependencies.py
+
+    **Status:** 0/5 tasks completed
+    ```
+
+    <Note>
+    **STOP — Phase 2 blocking gate**
+
+    `docs/plans/{US_ID}-plan.md` must exist on disk **and** you must respond with explicit approval before Phase 3 begins. If you request changes, the skill updates and re-presents the plan until you approve.
+    </Note>
+
+    **Exit checklist:**
+    - `docs/plans/{US_ID}-plan.md` verified on disk
+    - Plan presented to you
+    - You approved the plan explicitly
+
+  </Accordion>
+
+  <Accordion title="Phase 3 — Implementation">
+
+    **Objective:** Implement the functionality described in the approved plan.
+
+    **Approval required:** No — the skill proceeds autonomously. Per-task checkpoints are configurable.
+
+    **Entry gate:** `docs/plans/{US_ID}-plan.md` must exist on disk.
+
+    **Important:** Phase 3 reads the plan from disk at the start of the phase. It does not rely on the plan existing in conversation memory. This makes Phase 3 reproducible even across separate Claude sessions.
+
+    **What this phase does:**
+
+    1. Reads `docs/plans/{US_ID}-plan.md` from disk
+    2. Executes each task in the plan sequentially, bottom-up (lower layers first: models and schemas before services, services before routers)
+    3. Updates the task checkboxes in the plan file after each completed task
+    4. Tracks time per task using the tracking system
+
+    **Output:** Source code files structured according to the active profile's `component_path` variable. Examples by pattern:
+
+    | Pattern | Typical paths |
+    |---|---|
+    | MVC (PyQt) | `app/presentacion/{name}/modelo.py`, `vista.py`, `controlador.py` |
+    | Layered (FastAPI) | `app/domain/schemas/`, `app/services/`, `app/repositories/`, `app/api/` |
+    | Layered (Flask) | `app/servicios/`, `app/general/`, `app/datos/` |
+    | Generic Python | `src/{name}/` |
+
+    **Exit checklist:**
+    - All plan tasks completed and checked off
+    - Code files verified on disk
+
+  </Accordion>
+
+  <Accordion title="Phase 4 — Unit tests">
+
+    **Objective:** Create unit tests for each implemented component.
+
+    **Approval required:** No — tests must pass for the checklist to clear.
+
+    **Entry gate:** `docs/plans/{US_ID}-plan.md` must exist on disk (to know which components were implemented).
+
+    **What this phase does:**
+
+    1. Generates unit tests for each implemented component
+    2. Configures fixtures and mocks appropriate to the active test framework (`test_framework` variable in profile)
+    3. Runs the tests and verifies coverage
+
+    **Output artifact:** `tests/unit/test_*.py`
+
+    Each component gets its own test file. For a PyQt MVC implementation, that means separate test files for the model, view, and controller. For FastAPI layered, separate files for schemas, service logic, and repository operations.
+
+    **Test frameworks by profile:**
+
+    | Profile | Test framework |
+    |---|---|
+    | PyQt MVC | `pytest` + `pytest-qt` |
+    | FastAPI REST | `pytest` + `httpx` |
+    | Flask REST | `pytest` + `requests` |
+    | Flask Webapp | `pytest` + `selenium` |
+    | Generic Python | `pytest` |
+
+    **Exit checklist:**
+    - `tests/unit/test_*.py` files verified on disk
+    - All unit tests passing
+
+  </Accordion>
+
+  <Accordion title="Phase 5 — Integration tests">
+
+    **Objective:** Create integration tests validating complete flows between components.
+
+    **Approval required:** No — tests must pass for the checklist to clear.
+
+    **Entry gate:** `docs/plans/{US_ID}-plan.md` must exist on disk.
+
+    **What this phase does:**
+
+    1. Generates integration tests covering the full flow from entry point to data layer
+    2. Validates component interactions (e.g., endpoint → service → repository)
+    3. Runs the complete test suite
+
+    **Output artifact:** `tests/integration/test_*.py`
+
+    **Exit checklist:**
+    - `tests/integration/test_*.py` files verified on disk
+    - All integration tests passing
+
+  </Accordion>
+
+  <Accordion title="Phase 6 — BDD validation">
+
+    **Objective:** Implement pytest-bdd step definitions and execute the Gherkin scenarios generated in Phase 1.
+
+    **Approval required:** No — all scenarios must pass for the checklist to clear.
+
+    **Entry gate:** `tests/features/{US_ID}-*.feature` must exist on disk (produced by Phase 1).
+
+    **Note:** This phase is skipped automatically if BDD does not apply (set by Phase 0 classification or `--skip-bdd`).
+
+    **What this phase does:**
+
+    1. Reads the `.feature` file from Phase 1
+    2. Implements pytest-bdd step definitions for all Given/When/Then steps
+    3. Runs the BDD scenarios with pytest
+    4. Verifies that all scenarios pass
+
+    **Output artifact:** `tests/step_defs/test_*_steps.py`
+
+    **Exit checklist:**
+    - `tests/step_defs/test_*_steps.py` verified on disk
+    - All BDD scenarios passing
+
+  </Accordion>
+
+  <Accordion title="Phase 7 — Quality gates">
+
+    **Objective:** Validate that the implemented code meets objective quality standards using four metrics.
+
+    **Approval required:** No — all gates must pass (or exceptions must be documented) for the phase to close.
+
+    **Entry gate:** All three test suites must pass: `pytest tests/unit/ tests/integration/ tests/step_defs/ -v --tb=short`
+
+    **The 4 quality metrics:**
+
+    | Metric | Tool | Criterion |
+    |---|---|---|
+    | Pylint score | `pylint` | ≥ `quality_gates.pylint.min_score` from active profile |
+    | Cyclomatic complexity | `radon cc` | Each function ≤ `quality_gates.cyclomatic_complexity.max_per_function` from active profile |
+    | Maintainability index | `radon mi` | Average > `quality_gates.maintainability_index.min_score` from active profile |
+    | Test coverage | `pytest-cov` | ≥ `quality_gates.coverage.min_percent` from active profile |
+
+    All thresholds are read from the active profile's `config.json` — they are never hardcoded in the phase file.
+
+    **Output artifact:** `quality/reports/{US_ID}-quality.json`
+
+    The report has state `APROBADO` if all metrics pass, `RECHAZADO` if any fails. Phase 9 reads this file directly.
+
+    For full details on thresholds by profile, commands, and failure recovery, see the [Quality Gates](/skill/quality-gates) page.
+
+    **Exit checklist:**
+    - `quality/reports/{US_ID}-quality.json` exists with state `APROBADO`
+    - Pylint ≥ threshold
+    - CC max/function ≤ threshold
+    - MI average > threshold
+    - Coverage ≥ threshold
+
+  </Accordion>
+
+  <Accordion title="Phase 8 — Documentation">
+
+    **Objective:** Update technical documentation to reflect the completed implementation.
+
+    **Approval required:** Yes — you review updated documentation before Phase 9 begins.
+
+    **Entry gate:** `quality/reports/{US_ID}-quality.json` must exist with state `APROBADO`.
+
+    **What this phase does:**
+
+    1. Adds or updates docstrings in implemented modules
+    2. Updates `CHANGELOG` with the US implementation entry
+    3. Updates architecture documentation files (ADRs, `docs/architecture*.md`) if structural decisions were made
+    4. Presents the documentation changes to you for review
+
+    **Output:** In-place updates to existing source files and documentation files. No new canonical artifact path — changes are distributed across the codebase.
+
+    **Exit checklist:**
+    - Docstrings added or verified in all implemented modules
+    - CHANGELOG updated
+    - Architecture docs updated if applicable
+    - Documentation presented to you and approved
+
+  </Accordion>
+
+  <Accordion title="Phase 9 — Final report">
+
+    **Objective:** Generate a complete implementation report consolidating metrics, artifacts, and decisions from all phases.
+
+    **Approval required:** No, but a **STOP** gate verifies the report exists on disk and contains real metrics before the tracking session closes.
+
+    **Entry gate:** Both of the following must exist on disk:
+    - `docs/plans/{US_ID}-plan.md` (to list completed tasks)
+    - `quality/reports/{US_ID}-quality.json` (to include real quality metrics)
+
+    **What this phase does:**
+
+    1. Reads thresholds from `quality/reports/{US_ID}-quality.json` — not from memory or hardcoded values
+    2. Generates `docs/reports/{US_ID}-report.md` using the active profile's report template
+    3. Closes the phase tracking and then closes the full US tracking session with `end-tracking`
+
+    **Output artifact:** `docs/reports/{US_ID}-report.md`
+
+    The report includes:
+    - Executive summary (US ID, title, story points, completion date, actual time)
+    - Implemented components with file paths
+    - Quality metrics table (real values vs. thresholds from `quality.json`)
+    - Test counts (unit, integration, BDD)
+    - All files created or modified
+    - Acceptance criteria checklist
+    - Next steps
+
+    <Note>
+    **STOP — Phase 9 verification gate**
+
+    The tracking session will not close until:
+    1. `docs/reports/{US_ID}-report.md` exists on disk
+    2. The report contains real metric values read from `quality/reports/{US_ID}-quality.json` (not reconstructed from memory)
+    3. The full report has been displayed in the conversation with the file path shown
+    </Note>
+
+    **Tracking close sequence:**
+
+    ```bash
+    python .claude/tracking/track.py end-phase 9
+    python .claude/tracking/track.py end-tracking
+    ```
+
+    `end-tracking` is the only command that calculates total accumulated time across all phases, saves the historical record to `.claude/tracking/`, and generates the final time report. It runs once, after `end-phase 9`, and only in Phase 9.
+
+    **Exit checklist:**
+    - `docs/reports/{US_ID}-report.md` exists on disk
+    - Report contains real metrics from `quality/reports/{US_ID}-quality.json`
+    - Report presented in conversation with file path
+    - Phase 9 tracking closed
+    - Full US tracking closed (`end-tracking`)
+
+  </Accordion>
+
+</AccordionGroup>
+
+## Artifact map
+
+All canonical artifact paths are defined in `artifacts.md`, which is the single source of truth for file locations. Any change to artifact paths must be reflected there first.
+
+| Artifact | Canonical path | Produced in | Consumed in |
+|---|---|---|---|
+| Execution context | `docs/plans/{US_ID}-context.md` | Phase 0 | Phases 1–9 |
+| BDD feature file | `tests/features/{US_ID}-{name}.feature` | Phase 1 | Phase 6 |
+| Implementation plan | `docs/plans/{US_ID}-plan.md` | Phase 2 | Phases 3, 9 |
+| Pylint report | `quality/reports/{US_ID}-pylint.json` | Phase 7 | Phase 9 |
+| CC report | `quality/reports/{US_ID}-cc.json` | Phase 7 | Phase 9 |
+| MI report | `quality/reports/{US_ID}-mi.json` | Phase 7 | Phase 9 |
+| Coverage report | `quality/reports/{US_ID}-coverage.json` | Phase 7 | Phase 9 |
+| Coverage HTML | `quality/reports/{US_ID}-coverage-html/` | Phase 7 | Manual review |
+| Quality report | `quality/reports/{US_ID}-quality.json` | Phase 7 | Phases 8, 9 |
+| Final report | `docs/reports/{US_ID}-report.md` | Phase 9 | Delivery |

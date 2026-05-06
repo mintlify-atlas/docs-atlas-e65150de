@@ -1,0 +1,186 @@
+---
+title: "Claude Dev Kit changelog: all versions and changes"
+description: "Version history for Claude Dev Kit from v1.0.0 to v1.4.0: new profiles, 42 systematic corrections, robustness improvements, and initial release notes."
+---
+
+All notable changes to Claude Dev Kit are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+<AccordionGroup>
+
+  <Accordion title="v1.4.0 — 2026-04-09">
+
+    ### Added
+
+    #### Profile `hexagonal-ddd-bc` for the `implement-us` skill
+
+    - New customization profile `skills/implement-us/customizations/hexagonal-ddd-bc.json` for projects using hexagonal architecture + DDD + BC-first (Bounded Context first).
+    - Covers the 8 DDD component types: `AggregateRoot`, `ValueObject`, `DomainEvent`, `Port`, `CommandHandler`, `QueryHandler`, `Repository`, `ApiRouter`.
+    - Defines an explicit `implementation_order`: ValueObjects → DomainEvents → Aggregate → Ports → CommandHandlers → QueryHandlers → Repositories → ApiRouter.
+    - Integrated with `codeguard` as the quality gates orchestrator instead of calling `radon` directly.
+    - Closes issue #46.
+
+    #### Phase annotations for hexagonal architecture
+
+    - `phase-3-implementation.md`: added a note on the mandatory implementation order for DDD Bounded Contexts.
+    - `phase-7-quality-gates.md`: added a note on using `codeguard` instead of `radon` directly when the active profile is `hexagonal-ddd-bc`.
+
+  </Accordion>
+
+  <Accordion title="v1.3.0 — 2026-02-27">
+
+    ### Fixed
+
+    #### `implement-us` skill — systematic corrections after post-analysis (42 findings v1.2 + 24 discrepancies v1.3)
+
+    **Configuration files (`config.json`)**
+    - Corrected key `steps_path`: `"tests/features/steps/"` → `"tests/step_defs/"` to align with the real convention.
+    - Corrected key `test_path`: `"tests/"` → includes `unit/` and `integration/` subdirectories as appropriate per phase.
+    - Removed residual Django references from `variables.*.examples` across all fields.
+
+    **`skill.md`**
+    - Documented the `end-tracking` subcommand of the tracking CLI (previously absent, causing a failure in Phase 9).
+    - Removed Django references from profile examples.
+
+    **Phases 0–9** (corrections applied across all phase files):
+    - **Phase 0:** Clarified default values for `.pylintrc` and `pytest.ini`; added `skip_bdd` field to the `context.md` template; replaced hardcoded BDD paths with references to `artifacts.md`.
+    - **Phase 1:** Clarified how to use the BDD template and the feature file naming convention (`{US_ID}-{name}.feature`); unified the canonical path `tests/features/` throughout the file.
+    - **Phase 2:** Clarified the plan output path (`docs/plans/{US_ID}-plan.md`) in the template; established explicit priority between the external template and the embedded template.
+    - **Phase 3:** Added a check for the `--skip-bdd` flag before referencing feature files; added an instruction to read `component_structure` from the active profile.
+    - **Phase 4:** Unit test path now read from `config.json` instead of being hardcoded as `tests/unit/`.
+    - **Phase 5:** Adjusted precondition: verifies that no prior integration tests exist before creating new ones.
+    - **Phase 6:** Clarified use of `bdd_config.steps_template` from the active profile.
+    - **Phase 7:** Corrected hardcoded thresholds in the quality gates Python script; thresholds now read from `quality_gates` in the active profile.
+    - **Phase 8:** Removed the reference to `python manage.py generate_swagger` (Django) from the automation section.
+    - **Phase 9:** Added explicit mapping of `quality.json → thresholds` for filling report templates.
+
+    **`artifacts.md`, `conventions.md`**
+    - BDD paths corrected throughout: `docs/bdd/` → `tests/features/`.
+    - Removed Django references from all path examples.
+
+  </Accordion>
+
+  <Accordion title="v1.1.0 — 2026-02-24">
+
+    ### Added
+
+    #### New reference files for the `implement-us` skill
+
+    - `skills/implement-us/artifacts.md` — Centralised artifact map: canonical paths, the phase that generates each output, and the phases that consume it.
+    - `skills/implement-us/conventions.md` — Structural convention for phase files: imperative sections (`🔴 Acción Requerida`), reference sections (`📖 Referencia`), output checklists, and STOP blocks.
+
+    ### Modified
+
+    #### `implement-us` skill — robustness and reproducibility improvements (v1.1)
+
+    **Phase 0 — Context Validation**
+    - Fail-fast verification of required tools at startup: `pylint`, `radon`, `pytest`, `pytest-bdd`; the process stops if any tool is missing.
+    - Automatic classification of the user story type (new feature, refactoring, bug fix, etc.) with automatic BDD applicability decision.
+    - Generation of `docs/plans/{US_ID}-context.md` with execution decisions, artifact paths, and quality thresholds from the active profile.
+
+    **Tracking — all phases**
+    - Tracking instructions (phase start/end) rewritten as bash imperatives in `🔴 Acción Requerida` sections. Previous Python code blocks that the agent interpreted as documentation examples (and did not execute) were removed (OBS-001).
+    - Human duration estimates (`Duración estimada: X minutos`) removed from all phase headers (PRIN-001: human estimates do not produce useful variance when executed by an agent).
+
+    **Entry gates and output checklists — all phases**
+    - Each phase now has an entry gate that verifies the required artefacts from the previous phase exist on disk before starting.
+    - Each phase now has an output checklist with verifiable conditions that must pass before advancing to the next phase.
+
+    **Phase 2 — Implementation Plan**
+    - Blocking STOP before advancing to Phase 3: the plan must exist on disk and the user must give explicit approval.
+
+    **Phase 3 — Implementation**
+    - Entry gate verifies that both `context.md` and `plan.md` exist on disk before starting.
+    - Imperative instruction to read the plan from disk (not reconstructed from session context).
+    - Verification that each task covers at least one acceptance criterion of the user story.
+
+    **Phase 9 — Final Report**
+    - Input verification at startup: `plan.md` and `quality.json` must exist on disk.
+    - STOP block before closing tracking: the report must exist on disk before the session is finalised.
+
+    **Resilience — failure recovery protocol**
+    - `skill.md`: "Failure Handling" section with a 6-step general protocol; maximum of 2 autonomous retry attempts before escalating to the user.
+    - Phases 4, 5, 6, and 7: specific protocols for what to do when a phase fails, with a decision tree for the failure source (implementation, scenario, step definition, specific quality gate).
+
+  </Accordion>
+
+  <Accordion title="v1.0.0 — 2026-02-17">
+
+    ### Added
+
+    #### Installation system
+
+    - Cross-platform installer (`install/installer.py`) compatible with Linux, macOS, and Windows.
+    - Installation configuration in YAML (`install/config.yaml`) with profile selection.
+    - Post-installation validator (`install/validate-setup.py`) with detailed diagnostics.
+    - Interactive mode (guided profile selection) and non-interactive mode (`--profile`, `--yes`, `--dry-run`, `--force`).
+    - Unix/macOS wrapper script (`install/install.sh`).
+
+    #### `implement-us` skill
+
+    - Main `implement-us` skill guiding step-by-step user story implementation for Python projects.
+    - Modular architecture with one orchestrator (`skill.md`) and 10 specialised phase agents (Phase 0–9): Context Validation, BDD Scenario Generation, Implementation Planning, Implementation, Unit Tests, Integration Tests, BDD Validation, Quality Gates, Documentation, Final Report.
+    - Five profiles by technology stack, each with architectural conventions and specific quality gates: `pyqt-mvc`, `fastapi-rest`, `flask-rest`, `flask-webapp`, `generic-python`.
+    - Parametrizable variable system (`{ARCHITECTURE_PATTERN}`, `{COMPONENT_TYPE}`, `{COMPONENT_PATH}`, etc.) allowing a single skill definition to adapt to any stack.
+    - Base configuration file (`skills/implement-us/config.json`) with a per-profile override system.
+
+    #### Template system
+
+    - BDD scenario template (`templates/bdd/bdd-scenario.feature`) in Gherkin format.
+    - Implementation plan template (`templates/planning/implementation-plan.md`) with task breakdown and time estimates.
+    - Final report template (`templates/reporting/implementation-report.md`) with quality metrics.
+    - Unit test template (`templates/testing/test-unit.py`) with fixtures and parameterized tests.
+    - Snippet library: 35 code fragments organised by type (model, view, controller, service, repository, test, config) × 5 profiles.
+
+    #### Time tracking system
+
+    - Core tracking module (`tracking/time_tracker.py`) with automatic per-phase and per-task time measurement.
+    - Reports module (`tracking/reports.py`) for historical analysis.
+    - Five tracking slash commands: `/track-pause [reason]`, `/track-resume`, `/track-status`, `/track-report [us_id]`, `/track-history [--last N]`.
+    - JSON persistence at `.claude/tracking/{us_id}-tracking.json`.
+    - Variance tracking: estimated vs. actual time per phase and task.
+
+    #### Documentation
+
+    - User documentation (8 documents, ~2,800 lines): quick-start guide, installation guide for all platforms, customization guide, configuration reference, `implement-us` skill reference, tracking user guide, tracking examples, documentation index.
+    - Technical documentation for developers (5 documents, ~1,900 lines): guide for creating custom skills, template system architecture, tracking system architecture, session memory system documentation, contributor document template.
+    - GitHub Actions workflow for automatic Wiki synchronisation (`.github/workflows/sync-wiki.yml`) — triggers on every push to `main` and flattens the directory structure to PascalCase names.
+
+    #### Code examples by stack
+
+    Five complete and functional example projects generated using the framework itself, each with complete BDD scenarios, unit tests, integration tests, and quality gate validation:
+
+    - **PyQt6 MVC — Calculator** (`examples/code/pyqt-calculator/`): Desktop calculator with MVC architecture. 14 tests, 86% coverage.
+    - **FastAPI REST — TODO API** (`examples/code/fastapi-todo-api/`): Async REST API with layered architecture and dependency injection. 29 tests, 98% coverage.
+    - **Flask REST — Contacts API** (`examples/code/flask-contacts-api/`): Synchronous REST API with Repository + Mapper patterns. 38 tests, 94% coverage.
+    - **Flask WebApp — Blog** (`examples/code/flask-blog-app/`): Fullstack web application with BFF pattern and Server-Side Rendering. 43 tests, 99% coverage.
+    - **Generic Python CLI — CSV Tool** (`examples/code/csv-tool/`): Data-processing CLI tool with pandas. 90 tests, 98% coverage.
+
+    #### Framework test suite
+
+    - Complete test suite for the framework itself: 107 tests, 99% global coverage.
+    - `tests/test_installer.py` (37 tests) — installer logic, profile merging, validation, CLI options.
+    - `tests/test_tracking.py` (38 tests) — time tracking, pauses, variance calculation, JSON persistence.
+    - `tests/test_config_merge.py` (31 tests) — base config + profile merging, variable resolution.
+
+    ### Modified
+
+    - Documentation status updated from "in development" to "stable v1.0".
+    - Framework profile set updated: removed `django-mvt`; added `flask-rest` and `flask-webapp` as production-ready profiles.
+    - Wiki sync workflow updated with PascalCase names without hyphens or `.md` extension for full GitHub Wiki compatibility.
+
+    ### Fixed
+
+    - Internal documentation links updated to the new PascalCase Wiki format.
+    - References to the removed `django-mvt` profile corrected throughout all documentation and READMEs.
+    - Phase agent references in `skill.md` updated from provisional markers to correct links.
+    - Inconsistent phase count ("9 phases") corrected to "10 phases (Phase 0 to Phase 9)" throughout all documentation.
+    - Broken internal links in `install/README.md` pointing to non-existent paths corrected.
+    - `docs/examples/` directory added to the Wiki sync workflow (was absent from the initial workflow).
+
+    ### Removed
+
+    - Profile `django-mvt` removed from `install/config.yaml` and `skills/implement-us/customizations/` — this profile was planned but not implemented. Use `generic-python` as a starting point for Django projects.
+
+  </Accordion>
+
+</AccordionGroup>
